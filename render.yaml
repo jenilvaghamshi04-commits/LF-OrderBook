@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: lf-orderbook
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        value: "6489634984"
+      - key: TELEGRAM_BUY_THRESHOLD
+        value: "400"
+      - key: TELEGRAM_SELL_THRESHOLD
+        value: "400"
