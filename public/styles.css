@@ -61,10 +61,12 @@ footer{display:flex;justify-content:space-between;padding:15px 3px 0}
 .order-alert.buy{border-left:3px solid #22c55e}
 .order-alert.sell{border-left:3px solid #ef4444}
 .order-alert.total{border-left:3px solid #3b82f6}
+.order-alert.large-buy{border-left:3px solid #f59e0b}
 .alert-dot{width:14px;height:14px;border-radius:50%;background:currentColor}
 .order-alert.buy .alert-dot{color:#22c55e}
 .order-alert.sell .alert-dot{color:#ef4444}
 .order-alert.total .alert-dot{color:#3b82f6}
+.order-alert.large-buy .alert-dot{color:#f59e0b}
 .order-alert>div{display:grid;gap:3px}
 .order-alert small{color:var(--muted);font-size:11px}
 .order-alert b{font:600 13px ui-monospace,monospace}
@@ -86,6 +88,10 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .dialog-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:22px}
 .dialog-actions button{padding:10px 15px}
 .dialog-actions .primary{border-color:var(--green);background:var(--green);color:#04100b;font-weight:750}
+.large-buy-setting{margin-top:20px;padding:14px;border:1px solid #594317;border-radius:11px;background:#f59e0b0a}
+.setting-heading{display:grid;gap:4px;margin-bottom:13px}.setting-heading small{color:var(--muted);font-size:11px;line-height:1.4}
+.book-row.large-order{box-shadow:inset 3px 0 #f59e0b;background:#f59e0b12}
+.book-row.large-order span:last-child{color:#fbbf24;font-weight:750}
 
 @media(max-width:700px){main{padding:0 10px 18px}
 .topbar{position:sticky;top:0;z-index:10;height:auto;min-height:68px;padding:9px 0;background:#060806f2}
@@ -177,6 +183,7 @@ dialog form{padding:18px}
 [data-theme="light"] .threshold-fields input{background:#f7faf8;color:#142019}
 [data-theme="light"] .telegram-setting{background:#f7faf8;border-color:#d5e0d9}
 [data-theme="light"] .sound-setting{background:#f7faf8;border-color:#d5e0d9}
+[data-theme="light"] .large-buy-setting{background:#fffbeb;border-color:#f1cf86}
 [data-theme="light"] .sound-setting select,[data-theme="light"] .sound-setting button{background:#fff;color:#34443b;border-color:#cdd9d2}
 [data-theme="light"] .telegram-setting button,[data-theme="light"] .dialog-actions button,[data-theme="light"] .order-alert button{background:#fff;color:#34443b;border-color:#cdd9d2}
 [data-theme="light"] .order-alert{background:#fff;border-color:#d5e0d9;box-shadow:0 16px 42px #173c2726}

@@ -15,9 +15,10 @@ document.addEventListener("DOMContentLoaded",()=>{
   $("previewSound").onclick=async()=>{soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);const ctx=getAudio();if(ctx.state==="suspended")await ctx.resume().catch(()=>{});ring();};
   $("saveSettings").onclick=async event=>{
     event.preventDefault();
-    const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value),button=$("saveSettings");
-    if(buy<=0||sell<=0||total<=0)return;
+    const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value),largeBuy=num($("largeBuyInput").value),largeBuyLevels=Math.round(num($("largeBuyLevelsInput").value)),button=$("saveSettings");
+    if(buy<=0||sell<=0||total<=0||largeBuy<=0||largeBuyLevels<1||largeBuyLevels>18)return;
     soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);
+    largeBuySettings={amount:largeBuy,levels:largeBuyLevels,loaded:true};activeLargeBuys=new Set();localStorage.setItem(keys.largeBuy,String(largeBuy));localStorage.setItem(keys.largeBuyLevels,String(largeBuyLevels));
     button.disabled=true;button.textContent="Saving…";
     try{
       const response=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({buy,sell,total})}),result=await response.json();

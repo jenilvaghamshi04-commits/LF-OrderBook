@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -43,12 +43,19 @@
       <label><span><i class="dot sell-dot"></i>Sell-side minimum depth</span><div><input id="sellInput" type="number" min="1" step="1" inputmode="decimal"><b>USDT</b></div><small id="sellCurrent"></small></label>
       <label class="total-threshold"><span><i class="dot total-dot"></i>Total minimum depth (buy + sell)</span><div><input id="totalInput" type="number" min="1" step="1" inputmode="decimal"><b>USDT</b></div><small id="totalCurrent"></small></label>
     </div>
+    <section class="large-buy-setting">
+      <div class="setting-heading"><strong>🐋 Large buy-order alert</strong><small>Ring when a large order appears among the highest-price buy orders.</small></div>
+      <div class="threshold-fields large-order-fields">
+        <label><span>Minimum order value</span><div><input id="largeBuyInput" type="number" min="1" step="1" inputmode="decimal"><b>USDT</b></div><small id="largeBuyCurrent"></small></label>
+        <label><span>Highest buy orders to watch</span><div><input id="largeBuyLevelsInput" type="number" min="1" max="18" step="1" inputmode="numeric"><b>LEVELS</b></div><small id="largeBuyLevelsCurrent"></small></label>
+      </div>
+    </section>
     <div id="alarmSoundSetting" class="sound-setting"><div><strong>🔔 Notification sound</strong><small>Select one of five alert sounds</small></div><select id="soundSelect" aria-label="Notification sound"><option value="chime">Soft chime</option><option value="bell">Clear bell</option><option value="pulse">Gentle pulse</option><option value="digital">Digital alert</option><option value="urgent">Urgent alarm</option></select><button id="previewSound" type="button">▶ Preview sound</button></div>
     <div class="telegram-setting"><div><strong>Telegram alerts</strong><small id="telegramStatus">Checking Render configuration…</small><small>Persistent controls: /setdepth · /mute on · /mute off · /settings</small></div><label class="switch"><input id="telegramEnabled" type="checkbox"><span></span></label><button id="telegramTest" type="button" disabled>Send test</button></div>
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=10" defer></script>
-<script src="sync.js?v=10" defer></script>
+<script src="app.js?v=11" defer></script>
+<script src="sync.js?v=11" defer></script>
 </body>
 </html>
