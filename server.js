@@ -22,6 +22,8 @@ let telegramBuyThreshold = Number(process.env.TELEGRAM_BUY_THRESHOLD) || 500;
 let telegramSellThreshold = Number(process.env.TELEGRAM_SELL_THRESHOLD) || 300;
 let telegramTotalThreshold = Number(process.env.TELEGRAM_TOTAL_THRESHOLD) || 1000;
 const telegramCooldown = new Map();
+const telegramLowCount = new Map();
+const LOW_CONFIRMATIONS = 3;
 let telegramMuted = false;
 let telegramUpdateOffset = 0;
 let telegramPolling = false;
@@ -71,7 +73,7 @@ async function settingsApi(req,res){
   try{const data=await readJson(req),buy=Number(data.buy),sell=Number(data.sell),total=Number(data.total);if([buy,sell,total].some(value=>!Number.isFinite(value)||value<=0||value>1000000000))return json(res,400,{message:"Enter valid buy, sell, and total amounts"});telegramBuyThreshold=buy;telegramSellThreshold=sell;telegramTotalThreshold=total;telegramCooldown.clear();await saveTelegramState();return json(res,200,{saved:true,...sharedSettings()});}catch(error){return json(res,502,{message:error.message||"Could not save shared settings"});}
 }
 async function getDepthSnapshot(){
-  const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=100",{signal:AbortSignal.timeout(10000)}),book=await upstream.json();
+  const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000",{signal:AbortSignal.timeout(10000)}),book=await upstream.json();
   if(!upstream.ok)throw new Error("Gate.io order book is unavailable");
   const ask=Number(book.asks?.[0]?.[0]),bid=Number(book.bids?.[0]?.[0]),mid=ask&&bid?(ask+bid)/2:0;
   if(!mid)throw new Error("No valid LF/USDT market data");
@@ -159,13 +161,13 @@ async function configureTelegramWebhook(){
 async function monitorDepth(){
   if(!telegramToken)return;
   try{const depths=await getDepthSnapshot(),limits={buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold};
-    for(const side of ["buy","sell","total"])if(depths[side]<limits[side])await sendTelegramMessage(`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${depths[side].toFixed(2)} USDT\nMinimum: ${limits[side].toFixed(2)} USDT\nRange: 2% from mid-price`,side);
+    for(const side of ["buy","sell","total"]){const low=depths[side]<limits[side],count=low?(telegramLowCount.get(side)||0)+1:0;telegramLowCount.set(side,count);if(count>=LOW_CONFIRMATIONS)await sendTelegramMessage(`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${depths[side].toFixed(2)} USDT\nMinimum: ${limits[side].toFixed(2)} USDT\nConfirmed by ${LOW_CONFIRMATIONS} consecutive checks · Range: 2% from mid-price`,side);}
   }catch(error){console.error("Telegram monitor:",error.message);}
 }
 
 async function orderbook(res) {
   try {
-    const upstream = await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=100&with_id=true", {
+    const upstream = await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true", {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10000)
     });
