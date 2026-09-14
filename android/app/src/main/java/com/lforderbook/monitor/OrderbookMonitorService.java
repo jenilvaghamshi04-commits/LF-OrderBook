@@ -23,6 +23,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +38,10 @@ public class OrderbookMonitorService extends Service {
     private static final String ALERT_CHANNEL = "depth_alerts_v2";
     private static final int MONITOR_NOTIFICATION_ID = 41;
     private final Map<String, Long> lastAlert = new HashMap<>();
+    private final Map<String, Long> lowSince = new HashMap<>();
+    private final Map<String, ArrayDeque<Double>> depthSamples = new HashMap<>();
+    private static final long REQUIRED_LOW_TIME_MS = 60_000L;
+    private static final int MEDIAN_SAMPLE_COUNT = 5;
     private ScheduledExecutorService executor;
 
     @Override
@@ -91,13 +98,29 @@ public class OrderbookMonitorService extends Service {
             JSONObject book = fetchJson(BOOK_URL);
             JSONArray bids = book.getJSONArray("bids"), asks = book.getJSONArray("asks");
             double bid = bids.getJSONArray(0).getDouble(0), ask = asks.getJSONArray(0).getDouble(0), mid = (bid + ask) / 2d;
-            double buy = sumDepth(bids, mid, true), sell = sumDepth(asks, mid, false), total = buy + sell;
+            double buy = medianDepth("buy", sumDepth(bids, mid, true));
+            double sell = medianDepth("sell", sumDepth(asks, mid, false));
+            double total = buy + sell;
             notifyIfLow("buy", buy, settings.getDouble("buy"));
             notifyIfLow("sell", sell, settings.getDouble("sell"));
             notifyIfLow("total", total, settings.getDouble("total"));
         } catch (Exception ignored) {
             // A later scheduled check retries automatically when connectivity returns.
         }
+    }
+
+    private double medianDepth(String side, double value) {
+        ArrayDeque<Double> samples = depthSamples.get(side);
+        if (samples == null) {
+            samples = new ArrayDeque<>();
+            depthSamples.put(side, samples);
+        }
+        samples.addLast(value);
+        while (samples.size() > MEDIAN_SAMPLE_COUNT) samples.removeFirst();
+        ArrayList<Double> sorted = new ArrayList<>(samples);
+        Collections.sort(sorted);
+        int middle = sorted.size() / 2;
+        return sorted.size() % 2 == 1 ? sorted.get(middle) : (sorted.get(middle - 1) + sorted.get(middle)) / 2d;
     }
 
     private double sumDepth(JSONArray levels, double mid, boolean buy) throws Exception {
@@ -114,9 +137,13 @@ public class OrderbookMonitorService extends Service {
     private void notifyIfLow(String side, double value, double target) {
         if (value >= target) {
             lastAlert.remove(side);
+            lowSince.remove(side);
             return;
         }
-        long now = System.currentTimeMillis(), previous = lastAlert.containsKey(side) ? lastAlert.get(side) : 0;
+        long now = System.currentTimeMillis();
+        if (!lowSince.containsKey(side)) lowSince.put(side, now);
+        if (now - lowSince.get(side) < REQUIRED_LOW_TIME_MS) return;
+        long previous = lastAlert.containsKey(side) ? lastAlert.get(side) : 0;
         if (now - previous < 60_000) return;
         lastAlert.put(side, now);
         Intent open = new Intent(this, MainActivity.class);
