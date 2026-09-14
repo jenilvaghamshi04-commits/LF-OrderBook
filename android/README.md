@@ -10,5 +10,7 @@ Install the generated `LF-OrderBook-debug.apk` on Android 7.0 or newer. Android 
 
 - The app requires an internet connection and loads the live Render monitor.
 - Enable **Sound on** inside the monitor before expecting audible alarms.
-- Android may pause web audio while the screen is locked; Telegram alerts remain the reliable background option.
+- Version 2 includes a native foreground service that checks depth every 15 seconds after the app is swiped away.
+- Keep the permanent **LF OrderBook monitoring active** notification enabled. Android requires it for background monitoring.
+- Allow notification permission when first opening the app. Force-stopping the app disables monitoring until it is opened again.
 - This debug APK is intended for direct testing. A signed Android App Bundle is required for Google Play publication.
