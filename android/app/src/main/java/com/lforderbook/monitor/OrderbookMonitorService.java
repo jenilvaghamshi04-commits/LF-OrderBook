@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.Context;
 import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
@@ -39,7 +40,7 @@ public class OrderbookMonitorService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        createChannels();
+        ensureChannels(this);
         startForeground(MONITOR_NOTIFICATION_ID, monitoringNotification("Monitoring LF/USDT every 15 seconds"));
         executor = Executors.newSingleThreadScheduledExecutor();
         executor.scheduleWithFixedDelay(this::checkDepth, 2, 15, TimeUnit.SECONDS);
@@ -56,9 +57,9 @@ public class OrderbookMonitorService extends Service {
         return START_STICKY;
     }
 
-    private void createChannels() {
+    public static void ensureChannels(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-        NotificationManager manager = getSystemService(NotificationManager.class);
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
         NotificationChannel monitor = new NotificationChannel(MONITOR_CHANNEL, "Orderbook monitoring", NotificationManager.IMPORTANCE_LOW);
         monitor.setDescription("Keeps LF/USDT depth monitoring active in the background");
         monitor.setSound(null, null);
