@@ -3,6 +3,10 @@ package com.lforderbook.monitor;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
+import android.Manifest;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
@@ -48,6 +52,14 @@ public class MainActivity extends Activity {
         root.addView(offline, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
 
+        getSharedPreferences("monitor", MODE_PRIVATE).edit().putBoolean("enabled", true).apply();
+        Intent monitorIntent = new Intent(this, OrderbookMonitorService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(monitorIntent);
+        else startService(monitorIntent);
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
+        }
+
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -57,7 +69,7 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setUserAgentString(settings.getUserAgentString() + " LFOrderBookAndroid/1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " LFOrderBookAndroid/2.0");
 
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
