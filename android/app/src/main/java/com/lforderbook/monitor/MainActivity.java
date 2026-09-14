@@ -5,9 +5,12 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.Manifest;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.View;
 import android.view.Window;
 import android.webkit.WebChromeClient;
@@ -52,12 +55,11 @@ public class MainActivity extends Activity {
         root.addView(offline, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
 
-        getSharedPreferences("monitor", MODE_PRIVATE).edit().putBoolean("enabled", true).apply();
-        Intent monitorIntent = new Intent(this, OrderbookMonitorService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(monitorIntent);
-        else startService(monitorIntent);
+        OrderbookMonitorService.ensureChannels(this);
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
+            root.postDelayed(() -> requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001), 500);
+        } else {
+            startMonitor();
         }
 
         WebSettings settings = webView.getSettings();
@@ -90,6 +92,40 @@ public class MainActivity extends Activity {
 
         if (savedInstanceState == null) webView.loadUrl(MONITOR_URL);
         else webView.restoreState(savedInstanceState);
+    }
+
+    private void startMonitor() {
+        getSharedPreferences("monitor", MODE_PRIVATE).edit().putBoolean("enabled", true).apply();
+        Intent monitorIntent = new Intent(this, OrderbookMonitorService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(monitorIntent);
+        else startService(monitorIntent);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != 1001) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startMonitor();
+        } else {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Notifications are required")
+                    .setMessage("Allow notifications so LF OrderBook can alert you when the app is closed.")
+                    .setPositiveButton("Open settings", (dialog, which) -> openNotificationSettings())
+                    .setNegativeButton("Not now", null)
+                    .show();
+        }
+    }
+
+    private void openNotificationSettings() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+            startActivity(intent);
+        } catch (ActivityNotFoundException error) {
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
+        }
     }
 
     @Override
