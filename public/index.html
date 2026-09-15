@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -38,7 +38,7 @@
 <dialog id="settingsDialog">
   <form method="dialog">
     <button class="dialog-close" value="cancel" aria-label="Close">×</button>
-    <h2>Depth alert settings</h2><p>Set separate buy, sell, and combined total depth targets within 2% of the mid-price.</p>
+    <h2>Depth alert settings</h2><p>Set separate buy, sell, and combined total depth targets within 2% of the latest completed trade price.</p>
     <div class="threshold-fields">
       <label><span><i class="dot buy-dot"></i>Buy-side minimum depth</span><div><input id="buyInput" type="number" min="1" step="1" inputmode="decimal"><b>USDT</b></div><small id="buyCurrent"></small></label>
       <label><span><i class="dot sell-dot"></i>Sell-side minimum depth</span><div><input id="sellInput" type="number" min="1" step="1" inputmode="decimal"><b>USDT</b></div><small id="sellCurrent"></small></label>
@@ -51,12 +51,12 @@
         <label><span>Highest buy orders to watch</span><div><input id="largeBuyLevelsInput" type="number" min="1" max="18" step="1" inputmode="numeric"><b>LEVELS</b></div><small id="largeBuyLevelsCurrent"></small></label>
       </div>
     </section>
-    <div id="alarmSoundSetting" class="sound-setting"><div><strong>🔔 Notification sound</strong><small>Select one of five alert sounds</small></div><select id="soundSelect" aria-label="Notification sound"><option value="chime">Soft chime</option><option value="bell">Clear bell</option><option value="pulse">Gentle pulse</option><option value="digital">Digital alert</option><option value="urgent">Urgent alarm</option></select><button id="previewSound" type="button">▶ Preview sound</button></div>
+    <div id="alarmSoundSetting" class="sound-setting"><div><strong>🔔 Notification sound</strong><small>Enable alerts and select one of five sounds</small></div><label class="sound-enable"><input id="soundEnabledInput" type="checkbox"> Enable sound</label><select id="soundSelect" aria-label="Notification sound"><option value="chime">Soft chime</option><option value="bell">Clear bell</option><option value="pulse">Gentle pulse</option><option value="digital">Digital alert</option><option value="urgent">Urgent alarm</option></select><button id="previewSound" type="button">▶ Preview sound</button></div>
     <div class="telegram-setting"><div><strong>Telegram alerts & orderbook</strong><small id="telegramStatus">Checking Render configuration…</small><small>Commands: /price · /orderbook · /orderbook all · /buybook · /sellbook · /setdepth · /mute</small></div><label class="switch"><input id="telegramEnabled" type="checkbox"><span></span></label><button id="telegramTest" type="button" disabled>Send test</button></div>
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=20" defer></script>
-<script src="sync.js?v=20" defer></script>
+<script src="app.js?v=21" defer></script>
+<script src="sync.js?v=21" defer></script>
 </body>
 </html>

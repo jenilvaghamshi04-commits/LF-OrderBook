@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 3, CONFIRM_LOW_MS = 60000, MEDIAN_SAMPLES = 21;
+const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 2, CONFIRM_LOW_MS = 10000, MEDIAN_SAMPLES = 7;
 const keys = { buy: "lf-orderbook-buy-depth-threshold", sell: "lf-orderbook-sell-depth-threshold", total: "lf-orderbook-total-depth-threshold", largeBuy: "lf-orderbook-large-buy-threshold", largeBuyLevels: "lf-orderbook-large-buy-levels", legacy: "lf-orderbook-depth-threshold", sound: "lf-orderbook-sound", tone: "lf-orderbook-sound-tone", telegram: "lf-orderbook-telegram", history: "lf-orderbook-depth-history", theme: "lf-orderbook-theme" };
 let thresholds = { buy: DEFAULT, sell: DEFAULT, total: TOTAL_DEFAULT }, soundEnabled = false, soundTone = "chime", audio, alarmTimer, alarmStopTimer;
 let largeBuySettings={amount:LARGE_BUY_DEFAULT,levels:LARGE_BUY_LEVELS_DEFAULT}, activeLargeBuys=new Set(), largeBuySeen=new Map();
@@ -14,12 +14,12 @@ const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumF
 const price = (v) => { const n=num(v); return n >= 1 ? n.toLocaleString(undefined,{maximumFractionDigits:6}) : n.toLocaleString(undefined,{minimumFractionDigits:6,maximumFractionDigits:10}); };
 const amount = (v) => num(v).toLocaleString(undefined,{maximumFractionDigits:2});
 
-function calculate(book) {
-  const ask=num(book.asks?.[0]?.[0]), bid=num(book.bids?.[0]?.[0]), mid=ask&&bid?(ask+bid)/2:0;
-  if (!mid) return { mid:0,buy:0,sell:0 };
-  const total=(levels,side)=>levels.reduce((sum,[p,a])=>{p=num(p);a=num(a);const inside=side==="buy"?p>=mid*.98&&p<=mid:p>=mid&&p<=mid*1.02;return inside?sum+p*a:sum;},0);
+function calculate(book,referencePrice) {
+  const reference=num(referencePrice);
+  if (!reference) return { mid:0,buy:0,sell:0 };
+  const total=(levels,side)=>levels.reduce((sum,[p,a])=>{p=num(p);a=num(a);const inside=side==="buy"?p>=reference*.98&&p<=reference:p>=reference&&p<=reference*1.02;return inside?sum+p*a:sum;},0);
   const buy=total(book.bids||[],"buy"),sell=total(book.asks||[],"sell");
-  return { mid, buy, sell, total:buy+sell };
+  return { mid:reference, buy, sell, total:buy+sell };
 }
 
 function stabilize(raw){
@@ -60,9 +60,10 @@ async function load(){
   if(orderbookLoading)return;
   orderbookLoading=true;
   try{
-    const response=await fetch("/api/orderbook",{cache:"no-store"}),book=await response.json();
-    if(!response.ok)throw new Error(book.message||"Orderbook unavailable");
-    const rawDepth=calculate(book);if(!rawDepth.mid)throw new Error("Invalid orderbook");
+    const response=await fetch("/api/market",{cache:"no-store"}),market=await response.json();
+    if(!response.ok)throw new Error(market.message||"Market data unavailable");
+    const book=market.book;latestTrade=market.lastTrade;$("lastTradePrice").textContent=price(latestTrade.price);$("centerTradePrice").textContent=price(latestTrade.price);$("lastTradeMeta").textContent=`${latestTrade.side?latestTrade.side.toUpperCase()+" · ":""}${new Date(latestTrade.timestamp).toLocaleTimeString()}`;
+    const rawDepth=calculate(book,latestTrade.price);if(!rawDepth.mid)throw new Error("Invalid last trade reference");
     const depth=stabilize(rawDepth);latest={buy:depth.buy,sell:depth.sell,total:depth.total,mid:depth.mid,ready:true};addHistory(depth);
     const low={buy:depth.buy<thresholds.buy,sell:depth.sell<thresholds.sell,total:depth.total<thresholds.total},now=Date.now(),detected=[];
     for(const side of ["buy","sell","total"]){if(low[side]&&!lowSince[side])lowSince[side]=now;if(!low[side])lowSince[side]=0;const confirmed=low[side]&&now-lowSince[side]>=CONFIRM_LOW_MS,due=!previousLow.ready||!previousLow[side]||now-lastAlert[side]>=REPEAT;if(confirmed&&due){detected.push(side);lastAlert[side]=now;}if(!low[side])lastAlert[side]=0;previousLow[side]=confirmed;}
@@ -70,14 +71,14 @@ async function load(){
     const largeBuys=findLargeBuys(book),currentLargeBuys=new Set(largeBuys.map(order=>order.key)),newLargeBuys=[];
     for(const order of largeBuys){const count=(largeBuySeen.get(order.key)||0)+1;largeBuySeen.set(order.key,count);if(count>=LOW_CONFIRMATIONS&&!activeLargeBuys.has(order.key)){activeLargeBuys.add(order.key);newLargeBuys.push(order);}}
     for(const key of [...largeBuySeen.keys()])if(!currentLargeBuys.has(key)){largeBuySeen.delete(key);activeLargeBuys.delete(key);}
-    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length)playAlert();render(book,depth);renderDex();$("connection").textContent="Live · Gate.io + DEX · verified median";$("liveDot").classList.remove("offline");
+    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,depth);renderDex();$("connection").textContent="Live · Gate.io + DEX · last-trade depth";$("liveDot").classList.remove("offline");
   }catch(e){$("connection").textContent="Connection issue";$("liveDot").classList.add("offline");$("updated").textContent=e.message;}finally{orderbookLoading=false;}
 }
 
 async function init(){const legacy=num(localStorage.getItem(keys.legacy)),fallback=legacy>0?legacy:DEFAULT;thresholds.buy=num(localStorage.getItem(keys.buy))||fallback;thresholds.sell=num(localStorage.getItem(keys.sell))||fallback;thresholds.total=num(localStorage.getItem(keys.total))||TOTAL_DEFAULT;soundEnabled=localStorage.getItem(keys.sound)==="enabled";telegramEnabled=localStorage.getItem(keys.telegram)==="enabled";try{history=JSON.parse(localStorage.getItem(keys.history)||"[]").filter(x=>x&&x.t&&x.b>=0&&x.s>=0);}catch{history=[];}applyTheme(localStorage.getItem(keys.theme)||"dark");$("themeBtn").onclick=()=>applyTheme(document.documentElement.dataset.theme==="light"?"dark":"light");updateSoundButton();$("soundBtn").onclick=async()=>{soundEnabled=!soundEnabled;if(soundEnabled){localStorage.setItem(keys.sound,"enabled");await getAudio().resume();if(latest.ready&&(latest.buy<thresholds.buy||latest.sell<thresholds.sell||latest.total<thresholds.total))playAlert();else ring();}else{localStorage.removeItem(keys.sound);stopAlarm();}updateSoundButton();};$("testBtn").onclick=()=>ring();$("refreshBtn").onclick=load;$("chartRange").onchange=drawChart;window.addEventListener("resize",drawChart);$("settingsBtn").onclick=()=>{fillSettings();$("settingsDialog").showModal();};$("saveSettings").onclick=(e)=>{const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value);if(buy<=0||sell<=0||total<=0){e.preventDefault();return;}thresholds={buy,sell,total};telegramEnabled=$("telegramEnabled").checked&&telegramConfigured;localStorage.setItem(keys.buy,String(buy));localStorage.setItem(keys.sell,String(sell));localStorage.setItem(keys.total,String(total));telegramEnabled?localStorage.setItem(keys.telegram,"enabled"):localStorage.removeItem(keys.telegram);localStorage.removeItem(keys.legacy);previousLow={buy:false,sell:false,total:false,ready:false};lastAlert={buy:0,sell:0,total:0};stopAlarm();if(latest.ready){$("buyDepth").textContent=`${money(latest.buy)} / ${money(buy)} USDT`;$("sellDepth").textContent=`${money(latest.sell)} / ${money(sell)} USDT`;$("totalDepth").textContent=`${money(latest.total)} USDT`;}load();};$("telegramTest").onclick=async()=>{const b=$("telegramTest");b.disabled=true;b.textContent="Sending…";try{const r=await fetch("/api/telegram",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({side:"test"})}),j=await r.json();if(!r.ok)throw new Error(j.message);b.textContent="Sent ✓";}catch(e){b.textContent="Failed";$("telegramStatus").textContent=e.message;}setTimeout(()=>{b.textContent="Send test";b.disabled=!telegramConfigured;},2000);};try{const r=await fetch("/api/telegram"),j=await r.json();telegramConfigured=!!j.configured;}catch{}$("telegramStatus").textContent=telegramConfigured?"Configured on Render":"Add bot token and chat ID in Render";$("telegramEnabled").disabled=!telegramConfigured;$("telegramEnabled").checked=telegramEnabled&&telegramConfigured;$("telegramTest").disabled=!telegramConfigured;fillSettings();if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js");window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;$("installBtn").classList.remove("hidden");});$("installBtn").onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$("installBtn").classList.add("hidden");};drawChart();load();setInterval(load,1500);}
 function fillSettings(){if(!largeBuySettings.loaded){largeBuySettings.amount=num(localStorage.getItem(keys.largeBuy))||LARGE_BUY_DEFAULT;largeBuySettings.levels=Math.max(1,Math.min(18,Math.round(num(localStorage.getItem(keys.largeBuyLevels))||LARGE_BUY_LEVELS_DEFAULT)));largeBuySettings.loaded=true;}$("buyInput").value=thresholds.buy;$("sellInput").value=thresholds.sell;$("totalInput").value=thresholds.total;$("largeBuyInput").value=largeBuySettings.amount;$("largeBuyLevelsInput").value=largeBuySettings.levels;$("buyCurrent").textContent=`Current buy setting: ${money(thresholds.buy)} USDT`;$("sellCurrent").textContent=`Current sell setting: ${money(thresholds.sell)} USDT`;$("totalCurrent").textContent=`Current total setting: ${money(thresholds.total)} USDT`;$("largeBuyCurrent").textContent=`Alert at ${money(largeBuySettings.amount)} USDT or more`;$("largeBuyLevelsCurrent").textContent=`Watching top ${largeBuySettings.levels} highest-price buy orders`;}
-function updateSoundButton(){$("soundBtn").innerHTML=soundEnabled?"🔊 <b>Sound on</b>":"🔇 <b>Sound off</b>";$("soundBtn").classList.toggle("enabled",soundEnabled);$("testBtn").disabled=!soundEnabled;}
+function updateSoundButton(){$("soundBtn").innerHTML=soundEnabled?"🔊 <b>Sound on</b>":"🔇 <b>Sound off</b>";$("soundBtn").classList.toggle("enabled",soundEnabled);$("testBtn").disabled=!soundEnabled;if($("soundEnabledInput"))$("soundEnabledInput").checked=soundEnabled;}
 function applyTheme(theme){document.documentElement.dataset.theme=theme;localStorage.setItem(keys.theme,theme);const light=theme==="light";$("themeBtn").innerHTML=light?"🌙 <b>Dark</b>":"☀️ <b>Light</b>";$("themeBtn").title=light?"Switch to dark theme":"Switch to light theme";$("themeBtn").setAttribute("aria-label",$("themeBtn").title);document.querySelector('meta[name="theme-color"]').content=light?"#f4f7f5":"#060806";drawChart();}
 document.addEventListener("DOMContentLoaded",init);
-document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();loadLastTrade();setInterval(loadDexPrice,10000);setInterval(loadLastTrade,1500);});
+document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();setInterval(loadDexPrice,10000);});
 document.addEventListener("DOMContentLoaded",()=>{$("clearHistory").onclick=()=>{history=[];localStorage.removeItem(keys.history);drawChart();};});

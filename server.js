@@ -86,15 +86,15 @@ async function settingsApi(req,res){
   try{const data=await readJson(req),buy=Number(data.buy),sell=Number(data.sell),total=Number(data.total);if([buy,sell,total].some(value=>!Number.isFinite(value)||value<=0||value>1000000000))return json(res,400,{message:"Enter valid buy, sell, and total amounts"});telegramBuyThreshold=buy;telegramSellThreshold=sell;telegramTotalThreshold=total;telegramCooldown.clear();await saveTelegramState();return json(res,200,{saved:true,...sharedSettings()});}catch(error){return json(res,502,{message:error.message||"Could not save shared settings"});}
 }
 async function getDepthSnapshot(){
-  const book=await getRawOrderbook();
-  const ask=Number(book.asks?.[0]?.[0]),bid=Number(book.bids?.[0]?.[0]),mid=ask&&bid?(ask+bid)/2:0;
-  if(!mid)throw new Error("No valid LF/USDT market data");
-  const sum=(levels,side)=>levels.reduce((total,[price,amount])=>{price=Number(price);amount=Number(amount);const inside=side==="buy"?price>=mid*.98&&price<=mid:price>=mid&&price<=mid*1.02;return inside?total+price*amount:total;},0);
+  const [book,trade]=await Promise.all([getRawOrderbook(),getLastTrade()]);
+  const ask=Number(book.asks?.[0]?.[0]),bid=Number(book.bids?.[0]?.[0]),reference=Number(trade.price);
+  if(!reference)throw new Error("No valid LF/USDT last trade price");
+  const sum=(levels,side)=>levels.reduce((total,[price,amount])=>{price=Number(price);amount=Number(amount);const inside=side==="buy"?price>=reference*.98&&price<=reference:price>=reference&&price<=reference*1.02;return inside?total+price*amount:total;},0);
   const rawBuy=sum(book.bids||[],"buy"),rawSell=sum(book.asks||[],"sell");
   depthSampleWindow.push({buy:rawBuy,sell:rawSell});if(depthSampleWindow.length>5)depthSampleWindow.shift();
   const median=side=>{const values=depthSampleWindow.map(item=>item[side]).sort((a,b)=>a-b),middle=Math.floor(values.length/2);return values.length%2?values[middle]:(values[middle-1]+values[middle])/2;};
   const buy=median("buy"),sell=median("sell");
-  return {buy,sell,total:buy+sell,bid,ask,mid};
+  return {buy,sell,total:buy+sell,bid,ask,lastTrade:reference};
 }
 async function getRawOrderbook(){
   const now=Date.now();
@@ -184,10 +184,10 @@ async function handleTelegramCommand(text){
     }
     return "⚙️ Set depth commands\n/setbuy 400\n/setsell 300\n/settotal 700\n/setdepth 400 300 700\n/setdepth buy 400";
   }
-  if(command==="/settings")return `⚙️ LF/USDT alert settings\nBuy minimum: ${telegramBuyThreshold.toFixed(2)} USDT\nSell minimum: ${telegramSellThreshold.toFixed(2)} USDT\nTotal minimum: ${telegramTotalThreshold.toFixed(2)} USDT\nDepth range: ±2% from mid-price\nRepeat interval: 1 minute\nAlerts: ${telegramMuted?"Muted":"Active"}`;
+  if(command==="/settings")return `⚙️ LF/USDT alert settings\nBuy minimum: ${telegramBuyThreshold.toFixed(2)} USDT\nSell minimum: ${telegramSellThreshold.toFixed(2)} USDT\nTotal minimum: ${telegramTotalThreshold.toFixed(2)} USDT\nDepth range: ±2% from last trade price\nRepeat interval: 1 minute\nAlerts: ${telegramMuted?"Muted":"Active"}`;
   if(command==="/price"){
-    const [depth,dex]=await Promise.all([getDepthSnapshot(),getDexPrice()]),difference=depth.mid?(dex.price-depth.mid)/depth.mid*100:0;
-    return `💱 LF/USDT prices\nDEX price: ${dex.price.toFixed(10)} USDT\nOrderbook mid: ${depth.mid.toFixed(10)} USDT\nDifference: ${difference>=0?"+":""}${difference.toFixed(2)}%\nSource: ${dex.source}`;
+    const [depth,dex]=await Promise.all([getDepthSnapshot(),getDexPrice()]),difference=depth.lastTrade?(dex.price-depth.lastTrade)/depth.lastTrade*100:0;
+    return `💱 LF/USDT prices\nDEX price: ${dex.price.toFixed(10)} USDT\nLast trade: ${depth.lastTrade.toFixed(10)} USDT\nDifference: ${difference>=0?"+":""}${difference.toFixed(2)}%\nSource: ${dex.source}`;
   }
   if(command==="/orderbook"||command==="/buybook"||command==="/sellbook"){
     const requested=(args[0]||"20").toLowerCase(),count=requested==="all"?"all":Math.max(1,Math.min(100,Number.parseInt(requested,10)||20));
@@ -196,7 +196,7 @@ async function handleTelegramCommand(text){
   }
   if(command==="/status"||command==="/depth"){
     const depth=await getDepthSnapshot();
-    if(command==="/depth")return `📊 LF/USDT depth (±2%)\nBuy: ${depth.buy.toFixed(2)} USDT\nSell: ${depth.sell.toFixed(2)} USDT\nTotal: ${depth.total.toFixed(2)} USDT\nMid-price: ${depth.mid.toFixed(10)} USDT`;
+    if(command==="/depth")return `📊 LF/USDT depth (±2% from last trade)\nBuy: ${depth.buy.toFixed(2)} USDT\nSell: ${depth.sell.toFixed(2)} USDT\nTotal: ${depth.total.toFixed(2)} USDT\nLast trade: ${depth.lastTrade.toFixed(10)} USDT`;
     const low=[];if(depth.buy<telegramBuyThreshold)low.push("buy");if(depth.sell<telegramSellThreshold)low.push("sell");if(depth.total<telegramTotalThreshold)low.push("total");
     return `${low.length?"🔴 ATTENTION":"🟢 HEALTHY"} — LF/USDT monitor\nConnection: Live · Gate.io\nAlerts: ${telegramMuted?"Muted":"Active"}\nDepth status: ${low.length?`${low.join(", ")} below target`:"All targets met"}\nBuy: ${depth.buy.toFixed(2)} USDT\nSell: ${depth.sell.toFixed(2)} USDT\nTotal: ${depth.total.toFixed(2)} USDT`;
   }
@@ -236,7 +236,7 @@ async function configureTelegramWebhook(){
 async function monitorDepth(){
   if(!telegramToken)return;
   try{const depths=await getDepthSnapshot(),limits={buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold};
-    for(const side of ["buy","sell","total"]){const low=depths[side]<limits[side],now=Date.now();if(low&&!telegramLowSince.has(side))telegramLowSince.set(side,now);if(!low)telegramLowSince.delete(side);if(low&&now-(telegramLowSince.get(side)||now)>=CONFIRM_LOW_MS)await sendTelegramMessage(`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${depths[side].toFixed(2)} USDT\nMinimum: ${limits[side].toFixed(2)} USDT\nLow continuously for 60 seconds · Range: 2% from mid-price`,side);}
+    for(const side of ["buy","sell","total"]){const low=depths[side]<limits[side],now=Date.now();if(low&&!telegramLowSince.has(side))telegramLowSince.set(side,now);if(!low)telegramLowSince.delete(side);if(low&&now-(telegramLowSince.get(side)||now)>=CONFIRM_LOW_MS)await sendTelegramMessage(`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${depths[side].toFixed(2)} USDT\nMinimum: ${limits[side].toFixed(2)} USDT\nLow continuously for 60 seconds · Range: 2% from last trade price`,side);}
   }catch(error){console.error("Telegram monitor:",error.message);}
 }
 
@@ -256,12 +256,14 @@ async function orderbook(res) {
 }
 async function dexPriceApi(res){try{return json(res,200,await getDexPrice());}catch(error){return json(res,502,{message:error.message||"DEX price unavailable"});}}
 async function lastTradeApi(res){try{return json(res,200,await getLastTrade());}catch(error){return json(res,502,{message:error.message||"Last trade unavailable"});}}
+async function marketApi(res){try{const [book,lastTrade]=await Promise.all([getRawOrderbook(),getLastTrade()]);return json(res,200,{book,lastTrade,serverTime:Date.now()});}catch(error){return json(res,502,{message:error.message||"Market data unavailable"});}}
 
 const server = http.createServer(async (req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
   if (pathname === "/api/orderbook") return orderbook(res);
   if (pathname === "/api/dex-price") return dexPriceApi(res);
   if (pathname === "/api/last-trade") return lastTradeApi(res);
+  if (pathname === "/api/market") return marketApi(res);
   if (pathname === "/api/telegram") return telegram(req, res);
   if (pathname === "/api/settings") return settingsApi(req, res);
   if (pathname === "/api/telegram-webhook") return telegramWebhook(req, res);
@@ -280,4 +282,4 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(port, "0.0.0.0", async () => {console.log(`LF Orderbook running on port ${port}`);getRawOrderbook().catch(()=>{});getLastTrade().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),1000);setInterval(()=>getLastTrade().catch(()=>{}),1200);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
+server.listen(port, "0.0.0.0", async () => {console.log(`LF Orderbook running on port ${port}`);getRawOrderbook().catch(()=>{});getLastTrade().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});

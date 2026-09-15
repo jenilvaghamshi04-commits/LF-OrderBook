@@ -33,24 +33,24 @@ import java.util.concurrent.TimeUnit;
 public class OrderbookMonitorService extends Service {
     public static final String ACTION_STOP = "com.lforderbook.monitor.STOP";
     private static final String SETTINGS_URL = "https://lf-orderbook1.onrender.com/api/settings";
-    private static final String BOOK_URL = "https://lf-orderbook1.onrender.com/api/orderbook";
+    private static final String MARKET_URL = "https://lf-orderbook1.onrender.com/api/market";
     private static final String MONITOR_CHANNEL = "monitor_active_v2";
-    private static final String ALERT_CHANNEL = "depth_alerts_v2";
+    private static final String ALERT_CHANNEL = "depth_alerts_v3";
     private static final int MONITOR_NOTIFICATION_ID = 41;
     private final Map<String, Long> lastAlert = new HashMap<>();
     private final Map<String, Long> lowSince = new HashMap<>();
     private final Map<String, ArrayDeque<Double>> depthSamples = new HashMap<>();
-    private static final long REQUIRED_LOW_TIME_MS = 60_000L;
-    private static final int MEDIAN_SAMPLE_COUNT = 5;
+    private static final long REQUIRED_LOW_TIME_MS = 10_000L;
+    private static final int MEDIAN_SAMPLE_COUNT = 3;
     private ScheduledExecutorService executor;
 
     @Override
     public void onCreate() {
         super.onCreate();
         ensureChannels(this);
-        startForeground(MONITOR_NOTIFICATION_ID, monitoringNotification("Monitoring LF/USDT every 15 seconds"));
+        startForeground(MONITOR_NOTIFICATION_ID, monitoringNotification("Monitoring LF/USDT every 5 seconds"));
         executor = Executors.newSingleThreadScheduledExecutor();
-        executor.scheduleWithFixedDelay(this::checkDepth, 2, 15, TimeUnit.SECONDS);
+        executor.scheduleWithFixedDelay(this::checkDepth, 2, 5, TimeUnit.SECONDS);
     }
 
     @Override
@@ -95,11 +95,11 @@ public class OrderbookMonitorService extends Service {
         try {
             JSONObject settings = fetchJson(SETTINGS_URL);
             if (settings.optBoolean("muted", false)) return;
-            JSONObject book = fetchJson(BOOK_URL);
+            JSONObject market = fetchJson(MARKET_URL), book = market.getJSONObject("book"), trade = market.getJSONObject("lastTrade");
             JSONArray bids = book.getJSONArray("bids"), asks = book.getJSONArray("asks");
-            double bid = bids.getJSONArray(0).getDouble(0), ask = asks.getJSONArray(0).getDouble(0), mid = (bid + ask) / 2d;
-            double buy = medianDepth("buy", sumDepth(bids, mid, true));
-            double sell = medianDepth("sell", sumDepth(asks, mid, false));
+            double reference = trade.getDouble("price");
+            double buy = medianDepth("buy", sumDepth(bids, reference, true));
+            double sell = medianDepth("sell", sumDepth(asks, reference, false));
             double total = buy + sell;
             notifyIfLow("buy", buy, settings.getDouble("buy"));
             notifyIfLow("sell", sell, settings.getDouble("sell"));
@@ -123,12 +123,12 @@ public class OrderbookMonitorService extends Service {
         return sorted.size() % 2 == 1 ? sorted.get(middle) : (sorted.get(middle - 1) + sorted.get(middle)) / 2d;
     }
 
-    private double sumDepth(JSONArray levels, double mid, boolean buy) throws Exception {
+    private double sumDepth(JSONArray levels, double reference, boolean buy) throws Exception {
         double total = 0;
         for (int i = 0; i < levels.length(); i++) {
             JSONArray level = levels.getJSONArray(i);
             double price = level.getDouble(0), amount = level.getDouble(1);
-            boolean inside = buy ? price >= mid * 0.98 && price <= mid : price >= mid && price <= mid * 1.02;
+            boolean inside = buy ? price >= reference * 0.98 && price <= reference : price >= reference && price <= reference * 1.02;
             if (inside) total += price * amount;
         }
         return total;

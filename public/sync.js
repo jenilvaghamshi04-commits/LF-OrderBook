@@ -11,13 +11,15 @@ async function syncSharedSettings(){
 
 document.addEventListener("DOMContentLoaded",()=>{
   soundTone=localStorage.getItem(keys.tone)||"chime";$("soundSelect").value=soundTone;
+  $("soundEnabledInput").checked=soundEnabled;
   $("soundSelect").onchange=()=>{soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);};
-  $("previewSound").onclick=async()=>{soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);const ctx=getAudio();if(ctx.state==="suspended")await ctx.resume().catch(()=>{});ring();};
+  $("previewSound").onclick=async()=>{soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);$("soundEnabledInput").checked=true;const ctx=getAudio();if(ctx.state==="suspended")await ctx.resume().catch(()=>{});ring();};
   $("saveSettings").onclick=async event=>{
     event.preventDefault();
     const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value),largeBuy=num($("largeBuyInput").value),largeBuyLevels=Math.round(num($("largeBuyLevelsInput").value)),button=$("saveSettings");
     if(buy<=0||sell<=0||total<=0||largeBuy<=0||largeBuyLevels<1||largeBuyLevels>18)return;
     soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);
+    soundEnabled=$("soundEnabledInput").checked;if(soundEnabled){localStorage.setItem(keys.sound,"enabled");await getAudio().resume().catch(()=>{});}else{localStorage.removeItem(keys.sound);stopAlarm();}updateSoundButton();
     largeBuySettings={amount:largeBuy,levels:largeBuyLevels,loaded:true};activeLargeBuys=new Set();localStorage.setItem(keys.largeBuy,String(largeBuy));localStorage.setItem(keys.largeBuyLevels,String(largeBuyLevels));
     button.disabled=true;button.textContent="Saving…";
     try{
