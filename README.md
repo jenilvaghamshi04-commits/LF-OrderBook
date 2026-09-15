@@ -18,7 +18,7 @@ The server automatically uses Render's `PORT` environment variable.
 In Render, open **Environment** and add:
 
 - `TELEGRAM_BOT_TOKEN` — token received from Telegram's BotFather
-- `TELEGRAM_CHAT_ID` — `6489634984` (already used as the default)
+- `TELEGRAM_CHAT_ID` — your private numeric Telegram chat ID
 - `TELEGRAM_BUY_THRESHOLD` — server-side buy alert amount, for example `400`
 - `TELEGRAM_SELL_THRESHOLD` — server-side sell alert amount, for example `400`
 - `TELEGRAM_TOTAL_THRESHOLD` — server-side total alert amount, for example `800`

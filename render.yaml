@@ -9,7 +9,7 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
-        value: "6489634984"
+        sync: false
       - key: TELEGRAM_BUY_THRESHOLD
         value: "400"
       - key: TELEGRAM_SELL_THRESHOLD

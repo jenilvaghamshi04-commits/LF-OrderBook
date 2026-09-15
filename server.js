@@ -17,7 +17,7 @@ const files = {
 };
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN || "";
-const telegramChatId = process.env.TELEGRAM_CHAT_ID || "6489634984";
+const telegramChatId = process.env.TELEGRAM_CHAT_ID || "";
 let telegramBuyThreshold = Number(process.env.TELEGRAM_BUY_THRESHOLD) || 500;
 let telegramSellThreshold = Number(process.env.TELEGRAM_SELL_THRESHOLD) || 300;
 let telegramTotalThreshold = Number(process.env.TELEGRAM_TOTAL_THRESHOLD) || 1000;
@@ -35,6 +35,8 @@ let orderbookCache={book:null,updatedAt:0};
 let orderbookRequest=null;
 let dexCache={value:null,updatedAt:0};
 let dexRequest=null;
+let lastTradeCache={value:null,updatedAt:0};
+let lastTradeRequest=null;
 let telegramMuted = false;
 let telegramUpdateOffset = 0;
 let telegramPolling = false;
@@ -107,6 +109,15 @@ async function refreshOrderbook(){
     orderbookCache={book,updatedAt:Date.now()};return book;
   }catch(error){if(orderbookCache.book&&Date.now()-orderbookCache.updatedAt<15000)return orderbookCache.book;throw error;}finally{orderbookRequest=null;}})();
   return orderbookRequest;
+}
+async function getLastTrade(){
+  if(lastTradeCache.value&&Date.now()-lastTradeCache.updatedAt<1000)return lastTradeCache.value;
+  if(lastTradeRequest)return lastTradeRequest;
+  lastTradeRequest=(async()=>{try{const upstream=await fetch("https://api.gateio.ws/api/v4/spot/trades?currency_pair=LF_USDT&limit=1",{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),trades=await upstream.json(),trade=trades?.[0],price=Number(trade?.price);
+    if(!upstream.ok||!price)throw new Error("Gate.io last trade is unavailable");
+    const value={price,amount:Number(trade.amount)||0,side:trade.side||"",tradeId:String(trade.id||""),timestamp:Number(trade.create_time_ms)||Number(trade.create_time)*1000||Date.now(),source:"Gate.io last completed trade"};lastTradeCache={value,updatedAt:Date.now()};return value;
+  }catch(error){if(lastTradeCache.value&&Date.now()-lastTradeCache.updatedAt<15000)return {...lastTradeCache.value,source:"Gate.io last completed trade · cached"};throw error;}finally{lastTradeRequest=null;}})();
+  return lastTradeRequest;
 }
 async function getDexPrice(){
   if(dexCache.value&&Date.now()-dexCache.updatedAt<10000)return dexCache.value;
@@ -244,11 +255,13 @@ async function orderbook(res) {
   }
 }
 async function dexPriceApi(res){try{return json(res,200,await getDexPrice());}catch(error){return json(res,502,{message:error.message||"DEX price unavailable"});}}
+async function lastTradeApi(res){try{return json(res,200,await getLastTrade());}catch(error){return json(res,502,{message:error.message||"Last trade unavailable"});}}
 
 const server = http.createServer(async (req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
   if (pathname === "/api/orderbook") return orderbook(res);
   if (pathname === "/api/dex-price") return dexPriceApi(res);
+  if (pathname === "/api/last-trade") return lastTradeApi(res);
   if (pathname === "/api/telegram") return telegram(req, res);
   if (pathname === "/api/settings") return settingsApi(req, res);
   if (pathname === "/api/telegram-webhook") return telegramWebhook(req, res);
@@ -267,4 +280,4 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(port, "0.0.0.0", async () => {console.log(`LF Orderbook running on port ${port}`);getRawOrderbook().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),1000);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
+server.listen(port, "0.0.0.0", async () => {console.log(`LF Orderbook running on port ${port}`);getRawOrderbook().catch(()=>{});getLastTrade().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),1000);setInterval(()=>getLastTrade().catch(()=>{}),1200);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
