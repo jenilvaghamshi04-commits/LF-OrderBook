@@ -97,6 +97,10 @@ async function getDepthSnapshot(){
 async function getRawOrderbook(){
   const now=Date.now();
   if(orderbookCache.book&&now-orderbookCache.updatedAt<750)return orderbookCache.book;
+  if(orderbookCache.book&&now-orderbookCache.updatedAt<15000){if(!orderbookRequest)refreshOrderbook().catch(()=>{});return orderbookCache.book;}
+  return refreshOrderbook();
+}
+async function refreshOrderbook(){
   if(orderbookRequest)return orderbookRequest;
   orderbookRequest=(async()=>{try{const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),book=await upstream.json();
     if(!upstream.ok||!Array.isArray(book?.bids)||!Array.isArray(book?.asks))throw new Error("Gate.io order book is unavailable");
@@ -263,4 +267,4 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(port, "0.0.0.0", async () => {console.log(`LF Orderbook running on port ${port}`);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
+server.listen(port, "0.0.0.0", async () => {console.log(`LF Orderbook running on port ${port}`);getRawOrderbook().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),1000);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
