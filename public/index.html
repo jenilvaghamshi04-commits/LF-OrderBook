@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -25,7 +25,8 @@
     <div class="panel-title"><div><span class="activity">⌁</span><h1>Order book</h1></div><span id="updated">Connecting…</span></div>
     <div class="columns"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div>
     <div id="asks" class="book-rows loading">Loading market depth…</div>
-    <div class="spread-line"><div class="price-compare"><span class="mid-price-box"><small>Orderbook Mid Price</small><strong id="centerPrice">—</strong></span><span class="dex-price-box"><small>DEX Price</small><strong id="dexCenterPrice">—</strong></span><em id="dexDifference">DEX difference —</em></div><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span></div><small id="centerSpread">Spread —</small></div>
+    <div class="price-board"><div class="mid-price-box"><small>Mid Price (Gate.io Orderbook)</small><strong id="centerPrice">—</strong></div><div class="dex-price-box"><small>DEX Price</small><strong id="dexCenterPrice">—</strong></div><em id="dexDifference">DEX difference —</em></div>
+    <div class="spread-line"><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span></div><small id="centerSpread">Spread —</small></div>
     <div id="bids" class="book-rows"></div>
   </section>
   <section class="chart-panel"><div class="chart-head"><div><h2>Depth history</h2><span><i class="dot buy-dot"></i>Buy <i class="dot sell-dot"></i>Sell</span></div><select id="chartRange"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60" selected>60 minutes</option></select></div><div class="chart-wrap"><canvas id="depthChart"></canvas><span id="chartEmpty">Collecting depth history…</span></div></section>
@@ -55,7 +56,7 @@
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=16" defer></script>
-<script src="sync.js?v=16" defer></script>
+<script src="app.js?v=17" defer></script>
+<script src="sync.js?v=17" defer></script>
 </body>
 </html>
