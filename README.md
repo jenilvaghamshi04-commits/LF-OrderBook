@@ -1,5 +1,7 @@
 # LF Orderbook — Render version
 
+The monitor compares the Gate.io orderbook mid price with the LF DEX price and supports full orderbook viewing through Telegram. See `V15-DEX-TELEGRAM-ORDERBOOK.md` for the new commands.
+
 Lightweight LF/USDT depth monitor built for Render's free Web Service tier. It has no npm dependencies and no build step.
 
 ## Render settings

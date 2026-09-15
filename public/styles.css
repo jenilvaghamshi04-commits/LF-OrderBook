@@ -20,11 +20,14 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .source button:disabled{opacity:.4}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
 .live-dot.offline{background:var(--red);box-shadow:none}
-.market-strip{display:grid;grid-template-columns:repeat(4,1fr);margin:24px 0 14px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
+.market-strip{display:grid;grid-template-columns:1.25fr repeat(4,1fr);margin:24px 0 14px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
 .market-strip div{display:grid;gap:6px;padding:17px 20px;border-right:1px solid var(--line)}
 .market-strip div:last-child{border:0}
 .market-strip span,.panel-title>span{color:var(--muted);font-size:12px}
 .market-strip strong{font:550 15px ui-monospace,monospace}
+.market-strip .dex-card{background:linear-gradient(135deg,#3b82f612,#00e89d0b)}
+.market-strip .dex-card strong{color:#60a5fa}
+.market-strip .dex-card small{color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .buy-text{color:var(--green)}
 .sell-text{color:var(--red)}
 .orderbook{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
@@ -43,8 +46,13 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .book-row.ask span:first-of-type{color:#ff8292}
 .book-row.bid span:first-of-type{color:#49d9a7}
 .spread-line{min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:6px 20px;border-block:1px solid var(--line);background:#0d1310}
-.spread-line>strong{font:650 17px ui-monospace,monospace}
 .spread-line>small{color:var(--muted)}
+.price-compare{display:flex;align-items:center;gap:14px;min-width:250px}
+.price-compare>span{display:grid;gap:2px}
+.price-compare small{color:var(--muted);font-size:9px;text-transform:uppercase}
+.price-compare strong{font:650 14px ui-monospace,monospace}
+.price-compare>span:nth-child(2) strong{color:#60a5fa}
+.price-compare em{padding:4px 7px;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:9px;font-style:normal;white-space:nowrap}
 .liquidity-totals{display:flex;gap:28px}
 .liquidity-totals>span{display:grid;gap:3px}
 .liquidity-totals small{color:var(--muted);font-size:10px;text-transform:uppercase}
@@ -103,8 +111,9 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .source button,.source button.wide{width:36px;min-width:36px;padding:0}
 .market-strip{grid-template-columns:1fr 1fr;margin:12px 0 10px;border-radius:12px}
 .market-strip div{padding:12px 10px}
-.market-strip div:nth-child(2){border-right:0}
-.market-strip div:nth-child(-n+2){border-bottom:1px solid var(--line)}
+.market-strip div:nth-child(2),.market-strip div:nth-child(4){border-right:0}
+.market-strip div:nth-child(-n+4){border-bottom:1px solid var(--line)}
+.market-strip div:last-child{grid-column:1/-1}
 .market-strip strong{font-size:12px}
 .orderbook{border-radius:12px}
 .panel-title{height:52px;padding:0 10px}
@@ -113,8 +122,10 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .book-row{font-size:10.5px}
 .book-rows{min-height:460px}
 .spread-line{display:grid;gap:9px;padding:10px}
-.spread-line>strong{text-align:center;font-size:15px}
 .spread-line>small{display:none}
+.price-compare{display:grid;grid-template-columns:1fr 1fr;min-width:0;gap:6px}
+.price-compare>span{padding:7px;border:1px solid #202a25;border-radius:8px;text-align:center}
+.price-compare em{grid-column:1/-1;text-align:center}
 .liquidity-totals{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .liquidity-totals>span:last-child{grid-column:1/-1}
 .liquidity-totals>span{min-width:0;padding:8px;border:1px solid #202a25;border-radius:9px}

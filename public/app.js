@@ -1,10 +1,10 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 3, SUDDEN_DROP_RATIO = .65;
+const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 3, CONFIRM_LOW_MS = 60000, MEDIAN_SAMPLES = 21;
 const keys = { buy: "lf-orderbook-buy-depth-threshold", sell: "lf-orderbook-sell-depth-threshold", total: "lf-orderbook-total-depth-threshold", largeBuy: "lf-orderbook-large-buy-threshold", largeBuyLevels: "lf-orderbook-large-buy-levels", legacy: "lf-orderbook-depth-threshold", sound: "lf-orderbook-sound", tone: "lf-orderbook-sound-tone", telegram: "lf-orderbook-telegram", history: "lf-orderbook-depth-history", theme: "lf-orderbook-theme" };
 let thresholds = { buy: DEFAULT, sell: DEFAULT, total: TOTAL_DEFAULT }, soundEnabled = false, soundTone = "chime", audio, alarmTimer, alarmStopTimer;
 let largeBuySettings={amount:LARGE_BUY_DEFAULT,levels:LARGE_BUY_LEVELS_DEFAULT}, activeLargeBuys=new Set(), largeBuySeen=new Map();
-let latest = { buy: 0, sell: 0, total: 0, ready: false }, previousLow = { buy: false, sell: false, total: false, ready: false }, lastAlert = { buy: 0, sell: 0, total: 0 };
-let stableDepth=null, suddenDropCount={buy:0,sell:0}, lowCount={buy:0,sell:0,total:0};
+let latest = { buy: 0, sell: 0, total: 0, mid: 0, ready: false }, latestDex = null, previousLow = { buy: false, sell: false, total: false, ready: false }, lastAlert = { buy: 0, sell: 0, total: 0 };
+let depthSamples=[], lowSince={buy:0,sell:0,total:0};
 let telegramEnabled=false, telegramConfigured=false, history=[], deferredInstall;
 
 const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
@@ -21,15 +21,11 @@ function calculate(book) {
 }
 
 function stabilize(raw){
-  if(!stableDepth){stableDepth={...raw};return raw;}
-  const next={...raw};
-  for(const side of ["buy","sell"]){
-    if(raw[side] < stableDepth[side]*SUDDEN_DROP_RATIO){
-      suddenDropCount[side]++;
-      next[side]=suddenDropCount[side]>=LOW_CONFIRMATIONS?raw[side]:stableDepth[side];
-    }else{suddenDropCount[side]=0;next[side]=raw[side];}
-  }
-  next.total=next.buy+next.sell;stableDepth={...next};return next;
+  depthSamples.push({buy:raw.buy,sell:raw.sell});
+  depthSamples=depthSamples.slice(-MEDIAN_SAMPLES);
+  const median=side=>{const values=depthSamples.map(item=>item[side]).sort((a,b)=>a-b),middle=Math.floor(values.length/2);return values.length%2?values[middle]:(values[middle-1]+values[middle])/2;};
+  const buy=median("buy"),sell=median("sell");
+  return {mid:raw.mid,buy,sell,total:buy+sell};
 }
 
 function getAudio() { audio ||= new (window.AudioContext||window.webkitAudioContext)(); return audio; }
@@ -50,19 +46,22 @@ function rowsHtml(rows,side,mid){const levels=rows.map(([p,a])=>({p,a,value:num(
 
 function render(book,depth){const ask=num(book.asks?.[0]?.[0]),bid=num(book.bids?.[0]?.[0]),spread=ask-bid,pct=depth.mid?spread/depth.mid*100:0;$("midPrice").textContent=price(depth.mid);$("bestBid").textContent=price(bid);$("bestAsk").textContent=price(ask);$("spread").textContent=`${price(spread)} · ${pct.toFixed(3)}%`;$("centerPrice").textContent=price(depth.mid);$("centerSpread").textContent=`Spread ${pct.toFixed(3)}%`;$("asks").classList.remove("loading");$("asks").innerHTML=rowsHtml([...(book.asks||[])].slice(0,ROWS).reverse(),"ask",depth.mid);$("bids").innerHTML=rowsHtml((book.bids||[]).slice(0,ROWS),"bid",depth.mid);$("buyDepth").textContent=`${money(depth.buy)} / ${money(thresholds.buy)} USDT`;$("sellDepth").textContent=`${money(depth.sell)} / ${money(thresholds.sell)} USDT`;$("totalDepth").textContent=`${money(depth.total)} USDT`;$("buyCard").className=depth.buy<thresholds.buy?"low":"ok";$("sellCard").className=depth.sell<thresholds.sell?"low":"ok";$("totalCard").className=depth.total<thresholds.total?"low":"ok";$("targets").textContent=`Targets: Buy ${money(thresholds.buy)} · Sell ${money(thresholds.sell)} · Total ${money(thresholds.total)} USDT · repeats every 1 min while low`;$("updated").textContent=`Updated ${new Date().toLocaleTimeString()}`;}
 
+function renderDex(){if(!latestDex)return;$("dexPrice").textContent=price(latestDex.price);$("dexCenterPrice").textContent=price(latestDex.price);$("dexSource").textContent=`${latestDex.source} · 24h ${latestDex.change24h>=0?"+":""}${latestDex.change24h.toFixed(2)}%`;if(latest.mid){const difference=(latestDex.price-latest.mid)/latest.mid*100;$("dexDifference").textContent=`DEX ${difference>=0?"+":""}${difference.toFixed(2)}% vs mid`;}}
+async function loadDexPrice(){try{const response=await fetch("/api/dex-price",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"DEX price unavailable");latestDex=data;renderDex();}catch(error){$("dexSource").textContent=error.message;}}
+
 async function load(){
   try{
     const response=await fetch("/api/orderbook",{cache:"no-store"}),book=await response.json();
     if(!response.ok)throw new Error(book.message||"Orderbook unavailable");
     const rawDepth=calculate(book);if(!rawDepth.mid)throw new Error("Invalid orderbook");
-    const depth=stabilize(rawDepth);latest={buy:depth.buy,sell:depth.sell,total:depth.total,ready:true};addHistory(depth);
+    const depth=stabilize(rawDepth);latest={buy:depth.buy,sell:depth.sell,total:depth.total,mid:depth.mid,ready:true};addHistory(depth);
     const low={buy:depth.buy<thresholds.buy,sell:depth.sell<thresholds.sell,total:depth.total<thresholds.total},now=Date.now(),detected=[];
-    for(const side of ["buy","sell","total"]){lowCount[side]=low[side]?lowCount[side]+1:0;const confirmed=lowCount[side]>=LOW_CONFIRMATIONS,due=!previousLow.ready||!previousLow[side]||now-lastAlert[side]>=REPEAT;if(confirmed&&due){detected.push(side);lastAlert[side]=now;}if(!low[side])lastAlert[side]=0;previousLow[side]=confirmed;}
+    for(const side of ["buy","sell","total"]){if(low[side]&&!lowSince[side])lowSince[side]=now;if(!low[side])lowSince[side]=0;const confirmed=low[side]&&now-lowSince[side]>=CONFIRM_LOW_MS,due=!previousLow.ready||!previousLow[side]||now-lastAlert[side]>=REPEAT;if(confirmed&&due){detected.push(side);lastAlert[side]=now;}if(!low[side])lastAlert[side]=0;previousLow[side]=confirmed;}
     previousLow.ready=true;detected.forEach(side=>{showAlert(side,depth[side],thresholds[side]);sendTelegram(side,depth[side],thresholds[side]);});
     const largeBuys=findLargeBuys(book),currentLargeBuys=new Set(largeBuys.map(order=>order.key)),newLargeBuys=[];
     for(const order of largeBuys){const count=(largeBuySeen.get(order.key)||0)+1;largeBuySeen.set(order.key,count);if(count>=LOW_CONFIRMATIONS&&!activeLargeBuys.has(order.key)){activeLargeBuys.add(order.key);newLargeBuys.push(order);}}
     for(const key of [...largeBuySeen.keys()])if(!currentLargeBuys.has(key)){largeBuySeen.delete(key);activeLargeBuys.delete(key);}
-    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,depth);$("connection").textContent="Live · Gate.io";$("liveDot").classList.remove("offline");
+    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length)playAlert();render(book,depth);renderDex();$("connection").textContent="Live · Gate.io + DEX · verified median";$("liveDot").classList.remove("offline");
   }catch(e){$("connection").textContent="Connection issue";$("liveDot").classList.add("offline");$("updated").textContent=e.message;}
 }
 
@@ -71,3 +70,4 @@ function fillSettings(){if(!largeBuySettings.loaded){largeBuySettings.amount=num
 function updateSoundButton(){$("soundBtn").innerHTML=soundEnabled?"🔊 <b>Sound on</b>":"🔇 <b>Sound off</b>";$("soundBtn").classList.toggle("enabled",soundEnabled);$("testBtn").disabled=!soundEnabled;}
 function applyTheme(theme){document.documentElement.dataset.theme=theme;localStorage.setItem(keys.theme,theme);const light=theme==="light";$("themeBtn").innerHTML=light?"🌙 <b>Dark</b>":"☀️ <b>Light</b>";$("themeBtn").title=light?"Switch to dark theme":"Switch to light theme";$("themeBtn").setAttribute("aria-label",$("themeBtn").title);document.querySelector('meta[name="theme-color"]').content=light?"#f4f7f5":"#060806";drawChart();}
 document.addEventListener("DOMContentLoaded",init);
+document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();setInterval(loadDexPrice,20000);});

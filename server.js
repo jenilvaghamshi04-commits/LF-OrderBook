@@ -22,8 +22,11 @@ let telegramBuyThreshold = Number(process.env.TELEGRAM_BUY_THRESHOLD) || 500;
 let telegramSellThreshold = Number(process.env.TELEGRAM_SELL_THRESHOLD) || 300;
 let telegramTotalThreshold = Number(process.env.TELEGRAM_TOTAL_THRESHOLD) || 1000;
 const telegramCooldown = new Map();
-const telegramLowCount = new Map();
-const LOW_CONFIRMATIONS = 3;
+const telegramLowSince = new Map();
+const CONFIRM_LOW_MS = 60000;
+const depthSampleWindow = [];
+const DEX_PAIR_URL = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0xb37361ebebfe7e0f0d98300f0a8ae777daa1cc12";
+const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=0x957c7fA189a408E78543113412f6Ae1a9b4022C4&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true&include_last_updated_at=true";
 let telegramMuted = false;
 let telegramUpdateOffset = 0;
 let telegramPolling = false;
@@ -73,13 +76,42 @@ async function settingsApi(req,res){
   try{const data=await readJson(req),buy=Number(data.buy),sell=Number(data.sell),total=Number(data.total);if([buy,sell,total].some(value=>!Number.isFinite(value)||value<=0||value>1000000000))return json(res,400,{message:"Enter valid buy, sell, and total amounts"});telegramBuyThreshold=buy;telegramSellThreshold=sell;telegramTotalThreshold=total;telegramCooldown.clear();await saveTelegramState();return json(res,200,{saved:true,...sharedSettings()});}catch(error){return json(res,502,{message:error.message||"Could not save shared settings"});}
 }
 async function getDepthSnapshot(){
-  const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000",{signal:AbortSignal.timeout(10000)}),book=await upstream.json();
-  if(!upstream.ok)throw new Error("Gate.io order book is unavailable");
+  const book=await getRawOrderbook();
   const ask=Number(book.asks?.[0]?.[0]),bid=Number(book.bids?.[0]?.[0]),mid=ask&&bid?(ask+bid)/2:0;
   if(!mid)throw new Error("No valid LF/USDT market data");
   const sum=(levels,side)=>levels.reduce((total,[price,amount])=>{price=Number(price);amount=Number(amount);const inside=side==="buy"?price>=mid*.98&&price<=mid:price>=mid&&price<=mid*1.02;return inside?total+price*amount:total;},0);
-  const buy=sum(book.bids||[],"buy"),sell=sum(book.asks||[],"sell");
+  const rawBuy=sum(book.bids||[],"buy"),rawSell=sum(book.asks||[],"sell");
+  depthSampleWindow.push({buy:rawBuy,sell:rawSell});if(depthSampleWindow.length>5)depthSampleWindow.shift();
+  const median=side=>{const values=depthSampleWindow.map(item=>item[side]).sort((a,b)=>a-b),middle=Math.floor(values.length/2);return values.length%2?values[middle]:(values[middle-1]+values[middle])/2;};
+  const buy=median("buy"),sell=median("sell");
   return {buy,sell,total:buy+sell,bid,ask,mid};
+}
+async function getRawOrderbook(){
+  const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)}),book=await upstream.json();
+  if(!upstream.ok||!Array.isArray(book?.bids)||!Array.isArray(book?.asks))throw new Error("Gate.io order book is unavailable");
+  return book;
+}
+async function getDexPrice(){
+  try{
+    const upstream=await fetch(DEX_PAIR_URL,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)}),data=await upstream.json(),pair=data?.pair;
+    if(!upstream.ok||!Number(pair?.priceUsd))throw new Error("DEX price unavailable");
+    return {price:Number(pair.priceUsd),change24h:Number(pair.priceChange?.h24)||0,liquidity:Number(pair.liquidity?.usd)||0,volume24h:Number(pair.volume?.h24)||0,source:`DexScreener · ${pair.dexId||"DEX"}`,updatedAt:Date.now()};
+  }catch(error){
+    const upstream=await fetch(COINGECKO_URL,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)}),data=await upstream.json(),token=data?.["0x957c7fa189a408e78543113412f6ae1a9b4022c4"];
+    if(!upstream.ok||!Number(token?.usd))throw new Error("DEX price is unavailable");
+    return {price:Number(token.usd),change24h:Number(token.usd_24h_change)||0,liquidity:0,volume24h:Number(token.usd_24h_vol)||0,source:"CoinGecko fallback",updatedAt:Number(token.last_updated_at)*1000||Date.now()};
+  }
+}
+function telegramBookChunks(book,side,count,dex){
+  const asks=book.asks||[],bids=book.bids||[],ask=Number(asks[0]?.[0]),bid=Number(bids[0]?.[0]),mid=ask&&bid?(ask+bid)/2:0;
+  const sections=[];
+  const add=(title,levels)=>{const selected=count==="all"?levels:levels.slice(0,count);sections.push(`${title} (${selected.length}/${levels.length})\n`+selected.map(([p,a],i)=>`${i+1}. ${Number(p).toFixed(10)} | ${Number(a).toFixed(2)} LF | ${(Number(p)*Number(a)).toFixed(2)} USDT`).join("\n"));};
+  if(side!=="sell")add("🟢 BUY ORDERS — highest price first",bids);
+  if(side!=="buy")add("🔴 SELL ORDERS — lowest price first",asks);
+  const header=`📖 LF/USDT ORDER BOOK\nOrderbook mid: ${mid.toFixed(10)} USDT${dex?`\nDEX price: ${dex.price.toFixed(10)} USDT (${dex.source})`:""}\nPrice | Amount | Value`;
+  const chunks=[];let current=header;
+  for(const section of sections){for(const line of section.split("\n")){if(`${current}\n${line}`.length>3600){chunks.push(current);current="📖 LF/USDT ORDER BOOK (continued)";}current+=`\n${line}`;}}
+  if(current)chunks.push(current);return chunks;
 }
 async function handleTelegramCommand(text){
   const [raw,...args]=text.trim().split(/\s+/),command=raw.toLowerCase().split("@")[0];
@@ -119,6 +151,15 @@ async function handleTelegramCommand(text){
     return "⚙️ Set depth commands\n/setbuy 400\n/setsell 300\n/settotal 700\n/setdepth 400 300 700\n/setdepth buy 400";
   }
   if(command==="/settings")return `⚙️ LF/USDT alert settings\nBuy minimum: ${telegramBuyThreshold.toFixed(2)} USDT\nSell minimum: ${telegramSellThreshold.toFixed(2)} USDT\nTotal minimum: ${telegramTotalThreshold.toFixed(2)} USDT\nDepth range: ±2% from mid-price\nRepeat interval: 1 minute\nAlerts: ${telegramMuted?"Muted":"Active"}`;
+  if(command==="/price"){
+    const [depth,dex]=await Promise.all([getDepthSnapshot(),getDexPrice()]),difference=depth.mid?(dex.price-depth.mid)/depth.mid*100:0;
+    return `💱 LF/USDT prices\nDEX price: ${dex.price.toFixed(10)} USDT\nOrderbook mid: ${depth.mid.toFixed(10)} USDT\nDifference: ${difference>=0?"+":""}${difference.toFixed(2)}%\nSource: ${dex.source}`;
+  }
+  if(command==="/orderbook"||command==="/buybook"||command==="/sellbook"){
+    const requested=(args[0]||"20").toLowerCase(),count=requested==="all"?"all":Math.max(1,Math.min(100,Number.parseInt(requested,10)||20));
+    const [book,dex]=await Promise.all([getRawOrderbook(),getDexPrice().catch(()=>null)]);
+    return telegramBookChunks(book,command==="/buybook"?"buy":command==="/sellbook"?"sell":"both",count,dex);
+  }
   if(command==="/status"||command==="/depth"){
     const depth=await getDepthSnapshot();
     if(command==="/depth")return `📊 LF/USDT depth (±2%)\nBuy: ${depth.buy.toFixed(2)} USDT\nSell: ${depth.sell.toFixed(2)} USDT\nTotal: ${depth.total.toFixed(2)} USDT\nMid-price: ${depth.mid.toFixed(10)} USDT`;
@@ -130,7 +171,7 @@ async function handleTelegramCommand(text){
 async function handleTelegramUpdate(update){
   const message=update?.message,text=message?.text||"";
   if(String(message?.chat?.id)!==String(telegramChatId)||!text.startsWith("/"))return;
-  try{const reply=await handleTelegramCommand(text);if(reply)await replyTelegram(reply);}catch(error){await replyTelegram(`⚠️ ${error.message||"Command failed"}`).catch(()=>{});}
+  try{const reply=await handleTelegramCommand(text);for(const part of (Array.isArray(reply)?reply:[reply]))if(part)await replyTelegram(part);}catch(error){await replyTelegram(`⚠️ ${error.message||"Command failed"}`).catch(()=>{});}
 }
 async function telegramWebhook(req,res){
   if(req.method!=="POST")return json(res,405,{message:"Method not allowed"});
@@ -151,7 +192,7 @@ async function pollTelegramCommands(){
 }
 async function registerTelegramCommands(){
   if(!telegramToken)return;
-  try{await fetch(`https://api.telegram.org/bot${telegramToken}/setMyCommands`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({commands:[{command:"status",description:"Check monitor health"},{command:"depth",description:"Show live buy and sell depth"},{command:"setdepth",description:"Change depth targets"},{command:"setbuy",description:"Set buy minimum"},{command:"setsell",description:"Set sell minimum"},{command:"settotal",description:"Set total minimum"},{command:"mute",description:"Mute or resume alerts"},{command:"settings",description:"Show alert settings"}]}),signal:AbortSignal.timeout(10000)});}catch(error){console.error("Telegram command setup:",error.message);}
+  try{await fetch(`https://api.telegram.org/bot${telegramToken}/setMyCommands`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({commands:[{command:"status",description:"Check monitor health"},{command:"depth",description:"Show ±2% depth totals"},{command:"price",description:"Show DEX and orderbook mid prices"},{command:"orderbook",description:"Show buy and sell orders"},{command:"buybook",description:"Show buy-side orders"},{command:"sellbook",description:"Show sell-side orders"},{command:"setdepth",description:"Change depth targets"},{command:"setbuy",description:"Set buy minimum"},{command:"setsell",description:"Set sell minimum"},{command:"settotal",description:"Set total minimum"},{command:"mute",description:"Mute or resume alerts"},{command:"settings",description:"Show alert settings"}]}),signal:AbortSignal.timeout(10000)});}catch(error){console.error("Telegram command setup:",error.message);}
 }
 async function configureTelegramWebhook(){
   if(!telegramToken)return false;
@@ -161,7 +202,7 @@ async function configureTelegramWebhook(){
 async function monitorDepth(){
   if(!telegramToken)return;
   try{const depths=await getDepthSnapshot(),limits={buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold};
-    for(const side of ["buy","sell","total"]){const low=depths[side]<limits[side],count=low?(telegramLowCount.get(side)||0)+1:0;telegramLowCount.set(side,count);if(count>=LOW_CONFIRMATIONS)await sendTelegramMessage(`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${depths[side].toFixed(2)} USDT\nMinimum: ${limits[side].toFixed(2)} USDT\nConfirmed by ${LOW_CONFIRMATIONS} consecutive checks · Range: 2% from mid-price`,side);}
+    for(const side of ["buy","sell","total"]){const low=depths[side]<limits[side],now=Date.now();if(low&&!telegramLowSince.has(side))telegramLowSince.set(side,now);if(!low)telegramLowSince.delete(side);if(low&&now-(telegramLowSince.get(side)||now)>=CONFIRM_LOW_MS)await sendTelegramMessage(`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${depths[side].toFixed(2)} USDT\nMinimum: ${limits[side].toFixed(2)} USDT\nLow continuously for 60 seconds · Range: 2% from mid-price`,side);}
   }catch(error){console.error("Telegram monitor:",error.message);}
 }
 
@@ -183,10 +224,12 @@ async function orderbook(res) {
     res.end(JSON.stringify({ message: "Could not connect to Gate.io" }));
   }
 }
+async function dexPriceApi(res){try{return json(res,200,await getDexPrice());}catch(error){return json(res,502,{message:error.message||"DEX price unavailable"});}}
 
 const server = http.createServer(async (req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
   if (pathname === "/api/orderbook") return orderbook(res);
+  if (pathname === "/api/dex-price") return dexPriceApi(res);
   if (pathname === "/api/telegram") return telegram(req, res);
   if (pathname === "/api/settings") return settingsApi(req, res);
   if (pathname === "/api/telegram-webhook") return telegramWebhook(req, res);

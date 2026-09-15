@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=15">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -19,13 +19,13 @@
     <div class="source"><i id="liveDot" class="live-dot"></i><span id="connection">Live · Gate.io</span><button id="installBtn" class="wide hidden" title="Install app">⬇ <b>Install</b></button><button id="themeBtn" class="wide" title="Switch to light theme" aria-label="Switch to light theme">☀️ <b>Light</b></button><button id="soundBtn" class="wide" title="Toggle sound">🔇 <b>Sound off</b></button><button id="testBtn" class="wide" title="Test sound" disabled>🔔 <b>Test</b></button><button id="settingsBtn" title="Depth settings">⚙</button><button id="refreshBtn" title="Refresh">↻</button></div>
   </header>
 
-  <section class="market-strip"><div><span>Mid price</span><strong id="midPrice">—</strong></div><div><span>Best bid</span><strong id="bestBid" class="buy-text">—</strong></div><div><span>Best ask</span><strong id="bestAsk" class="sell-text">—</strong></div><div><span>Spread</span><strong id="spread">—</strong></div></section>
+  <section class="market-strip"><div class="dex-card"><span>DEX price</span><strong id="dexPrice">—</strong><small id="dexSource">Loading DEX…</small></div><div><span>Orderbook mid price</span><strong id="midPrice">—</strong></div><div><span>Best bid</span><strong id="bestBid" class="buy-text">—</strong></div><div><span>Best ask</span><strong id="bestAsk" class="sell-text">—</strong></div><div><span>Spread</span><strong id="spread">—</strong></div></section>
 
   <section class="orderbook">
     <div class="panel-title"><div><span class="activity">⌁</span><h1>Order book</h1></div><span id="updated">Connecting…</span></div>
     <div class="columns"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div>
     <div id="asks" class="book-rows loading">Loading market depth…</div>
-    <div class="spread-line"><strong id="centerPrice">—</strong><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span></div><small id="centerSpread">Spread —</small></div>
+    <div class="spread-line"><div class="price-compare"><span><small>Orderbook mid</small><strong id="centerPrice">—</strong></span><span><small>DEX price</small><strong id="dexCenterPrice">—</strong></span><em id="dexDifference">Difference —</em></div><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span></div><small id="centerSpread">Spread —</small></div>
     <div id="bids" class="book-rows"></div>
   </section>
   <section class="chart-panel"><div class="chart-head"><div><h2>Depth history</h2><span><i class="dot buy-dot"></i>Buy <i class="dot sell-dot"></i>Sell</span></div><select id="chartRange"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60" selected>60 minutes</option></select></div><div class="chart-wrap"><canvas id="depthChart"></canvas><span id="chartEmpty">Collecting depth history…</span></div></section>
@@ -51,11 +51,11 @@
       </div>
     </section>
     <div id="alarmSoundSetting" class="sound-setting"><div><strong>🔔 Notification sound</strong><small>Select one of five alert sounds</small></div><select id="soundSelect" aria-label="Notification sound"><option value="chime">Soft chime</option><option value="bell">Clear bell</option><option value="pulse">Gentle pulse</option><option value="digital">Digital alert</option><option value="urgent">Urgent alarm</option></select><button id="previewSound" type="button">▶ Preview sound</button></div>
-    <div class="telegram-setting"><div><strong>Telegram alerts</strong><small id="telegramStatus">Checking Render configuration…</small><small>Persistent controls: /setdepth · /mute on · /mute off · /settings</small></div><label class="switch"><input id="telegramEnabled" type="checkbox"><span></span></label><button id="telegramTest" type="button" disabled>Send test</button></div>
+    <div class="telegram-setting"><div><strong>Telegram alerts & orderbook</strong><small id="telegramStatus">Checking Render configuration…</small><small>Commands: /price · /orderbook · /orderbook all · /buybook · /sellbook · /setdepth · /mute</small></div><label class="switch"><input id="telegramEnabled" type="checkbox"><span></span></label><button id="telegramTest" type="button" disabled>Send test</button></div>
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=12" defer></script>
-<script src="sync.js?v=12" defer></script>
+<script src="app.js?v=15" defer></script>
+<script src="sync.js?v=15" defer></script>
 </body>
 </html>
