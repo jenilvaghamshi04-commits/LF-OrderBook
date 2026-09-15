@@ -8,6 +8,7 @@ let depthSamples=[], lowSince={buy:0,sell:0,total:0};
 let telegramEnabled=false, telegramConfigured=false, history=[], deferredInstall;
 let orderbookLoading=false,dexLoading=false;
 let tradeLoading=false,latestTrade=null;
+let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates=[],streamReconnect=null,lastStreamRender=0;
 
 const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -62,12 +63,19 @@ async function fetchFastMarket(){
   return Promise.any([direct(),server()]);
 }
 
+function applyStreamLevels(levels,changes,descending){const map=new Map((levels||[]).map(level=>[String(level[0]),String(level[1])]));for(const [p,a] of changes||[]){if(num(a)===0)map.delete(String(p));else map.set(String(p),String(a));}return [...map.entries()].sort((a,b)=>descending?num(b[0])-num(a[0]):num(a[0])-num(b[0])).slice(0,1000);}
+function applyStreamUpdate(update){if(!streamBook)return false;const next=streamId+1;if(num(update.u)<next)return true;if(num(update.U)>next)return false;if(update.full){const bidFloor=Math.min(...(update.b||[]).map(level=>num(level[0])).filter(Boolean)),askCeiling=Math.max(...(update.a||[]).map(level=>num(level[0])).filter(Boolean));if(Number.isFinite(bidFloor))streamBook.bids=streamBook.bids.filter(level=>num(level[0])<bidFloor);if(Number.isFinite(askCeiling))streamBook.asks=streamBook.asks.filter(level=>num(level[0])>askCeiling);}streamBook.bids=applyStreamLevels(streamBook.bids,update.b,true);streamBook.asks=applyStreamLevels(streamBook.asks,update.a,false);streamBook.id=num(update.u);streamBook.update=num(update.t)||Date.now();streamId=num(update.u);return true;}
+function seedStreamBook(book){streamBook={...book,bids:(book.bids||[]).map(level=>[...level]),asks:(book.asks||[]).map(level=>[...level])};streamId=num(book.id);const pending=streamUpdates.sort((a,b)=>num(a.u)-num(b.u));streamUpdates=[];streamReady=true;for(const update of pending){if(!applyStreamUpdate(update)){streamReady=false;break;}}}
+function queueStreamRender(){const now=Date.now();if(now-lastStreamRender<250)return;lastStreamRender=now;load();}
+function connectMarketStream(){clearTimeout(streamReconnect);try{streamSocket?.close();const ws=new WebSocket("wss://api.gateio.ws/ws/v4/");streamSocket=ws;ws.onopen=()=>{const time=Math.floor(Date.now()/1000);ws.send(JSON.stringify({time,channel:"spot.order_book_update",event:"subscribe",payload:["LF_USDT","100ms"]}));ws.send(JSON.stringify({time,channel:"spot.trades",event:"subscribe",payload:["LF_USDT"]}));};ws.onmessage=event=>{try{const message=JSON.parse(event.data);if(message.event!=="update"||!message.result)return;if(message.channel==="spot.trades"){const trade=message.result;if(!num(trade.price))return;latestTrade={price:num(trade.price),amount:num(trade.amount),side:trade.side||"",tradeId:String(trade.id||""),timestamp:num(trade.create_time_ms)||num(trade.create_time)*1000||Date.now(),source:"Gate.io WebSocket"};queueStreamRender();return;}if(message.channel==="spot.order_book_update"){const update=message.result;if(!streamReady){streamUpdates.push(update);streamUpdates=streamUpdates.slice(-500);return;}if(!applyStreamUpdate(update)){streamReady=false;streamUpdates=[update];load();return;}queueStreamRender();}}catch{}};ws.onerror=()=>ws.close();ws.onclose=()=>{streamReady=false;streamReconnect=setTimeout(connectMarketStream,2000);};}catch{streamReconnect=setTimeout(connectMarketStream,2000);}}
+
 async function load(){
   if(orderbookLoading)return;
   orderbookLoading=true;
   try{
-    const market=await fetchFastMarket();
+    const market=streamReady&&streamBook&&latestTrade?{book:streamBook,lastTrade:latestTrade,feed:"WebSocket"}:await fetchFastMarket();
     const book=market.book;latestTrade=market.lastTrade;$("lastTradePrice").textContent=price(latestTrade.price);$("centerTradePrice").textContent=price(latestTrade.price);$("lastTradeMeta").textContent=`${latestTrade.side?latestTrade.side.toUpperCase()+" · ":""}${new Date(latestTrade.timestamp).toLocaleTimeString()}`;
+    if(streamSocket?.readyState===WebSocket.OPEN&&!streamReady)seedStreamBook(book);
     const rawDepth=calculate(book,latestTrade.price);if(!rawDepth.mid)throw new Error("Invalid last trade reference");
     const depth=stabilize(rawDepth);latest={buy:depth.buy,sell:depth.sell,total:depth.total,mid:depth.mid,ready:true};addHistory(depth);
     const low={buy:depth.buy<thresholds.buy,sell:depth.sell<thresholds.sell,total:depth.total<thresholds.total},now=Date.now(),detected=[];
@@ -76,7 +84,7 @@ async function load(){
     const largeBuys=findLargeBuys(book),currentLargeBuys=new Set(largeBuys.map(order=>order.key)),newLargeBuys=[];
     for(const order of largeBuys){const count=(largeBuySeen.get(order.key)||0)+1;largeBuySeen.set(order.key,count);if(count>=LOW_CONFIRMATIONS&&!activeLargeBuys.has(order.key)){activeLargeBuys.add(order.key);newLargeBuys.push(order);}}
     for(const key of [...largeBuySeen.keys()])if(!currentLargeBuys.has(key)){largeBuySeen.delete(key);activeLargeBuys.delete(key);}
-    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,depth);renderDex();$("connection").textContent=`Live · Gate.io ${market.feed==="direct"?"direct":"fallback"} · last-trade depth`;$("liveDot").classList.remove("offline");
+    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,depth);renderDex();$("connection").textContent=`Live · Gate.io ${market.feed==="WebSocket"?"WebSocket":market.feed==="direct"?"direct":"fallback"} · last-trade depth`;$("liveDot").classList.remove("offline");
   }catch(e){$("connection").textContent="Connection issue";$("liveDot").classList.add("offline");$("updated").textContent=e.message;}finally{orderbookLoading=false;}
 }
 
@@ -87,3 +95,4 @@ function applyTheme(theme){document.documentElement.dataset.theme=theme;localSto
 document.addEventListener("DOMContentLoaded",init);
 document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();setInterval(loadDexPrice,10000);});
 document.addEventListener("DOMContentLoaded",()=>{$("clearHistory").onclick=()=>{history=[];localStorage.removeItem(keys.history);drawChart();};});
+document.addEventListener("DOMContentLoaded",()=>{connectMarketStream();document.addEventListener("pointerdown",()=>{if(soundEnabled)getAudio().resume().catch(()=>{});},{passive:true});});
