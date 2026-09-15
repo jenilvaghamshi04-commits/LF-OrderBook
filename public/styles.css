@@ -204,6 +204,18 @@ dialog form{padding:18px}
 [data-theme="light"] .telegram-setting button,[data-theme="light"] .dialog-actions button,[data-theme="light"] .order-alert button{background:#fff;color:#34443b;border-color:#cdd9d2}
 [data-theme="light"] .order-alert{background:#fff;border-color:#d5e0d9;box-shadow:0 16px 42px #173c2726}
 [data-theme="light"] .chart-head select{background:#fff;color:#142019;border-color:#ccd8d1}
+
+.history-records{border-top:1px solid var(--line);padding:14px 18px 18px}
+.history-record-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.history-record-head>div{display:grid;gap:3px}.history-record-head strong{font-size:14px}.history-record-head small{color:var(--muted);font-size:11px}
+.history-record-head button{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);cursor:pointer}
+.history-sides{display:grid;grid-template-columns:1fr 1fr;gap:12px}.history-sides>section{min-width:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+.history-sides h3{display:flex;align-items:center;gap:7px;margin:0;padding:11px 12px;border-bottom:1px solid var(--line);font-size:12px}
+.history-list{max-height:310px;overflow:auto}.history-row{display:grid;grid-template-columns:1.15fr 1fr auto;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:11px}.history-row:last-child{border-bottom:0}
+.history-row time{display:grid;gap:2px}.history-row time b{font:700 11px ui-monospace,monospace}.history-row time small{color:var(--muted);font-size:9px}.history-row>strong{font:700 11px ui-monospace,monospace}.history-row>span{padding:4px 6px;border-radius:6px;font-size:9px;font-weight:700}.history-row.healthy>span{background:#22c55e18;color:var(--green)}.history-row.low>span{background:#ef444418;color:#ff6673}.history-row.low>strong{color:#ff6673}
+.history-empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:11px}
+[data-theme="light"] .history-sides>section{background:#fff}
+@media(max-width:640px){.history-records{padding:12px 9px}.history-sides{grid-template-columns:1fr}.history-list{max-height:240px}.history-row{grid-template-columns:1fr 1fr auto}}
 [data-theme="light"] .book-row.far span:first-of-type{color:#6f7e76}
 [data-theme="light"] .columns{color:#697970}
 

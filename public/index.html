@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -29,7 +29,7 @@
     <div class="spread-line"><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span></div><small id="centerSpread">Spread —</small></div>
     <div id="bids" class="book-rows"></div>
   </section>
-  <section class="chart-panel" id="depthHistory"><div class="chart-head"><div><h2>Depth history</h2><span><i class="dot buy-dot"></i>Buy-side depth <i class="dot sell-dot"></i>Sell-side depth</span></div><select id="chartRange"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60" selected>60 minutes</option></select></div><div class="chart-wrap"><canvas id="depthChart"></canvas><span id="chartEmpty">Collecting buy and sell depth history…</span></div></section>
+  <section class="chart-panel" id="depthHistory"><div class="chart-head"><div><h2>Depth history</h2><span><i class="dot buy-dot"></i>Buy-side depth <i class="dot sell-dot"></i>Sell-side depth</span></div><select id="chartRange"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60" selected>60 minutes</option></select></div><div class="chart-wrap"><canvas id="depthChart"></canvas><span id="chartEmpty">Collecting buy and sell depth history…</span></div><div class="history-records"><div class="history-record-head"><div><strong>Timed depth records</strong><small>Latest readings with date, time and target status</small></div><button id="clearHistory" type="button">Clear history</button></div><div class="history-sides"><section><h3><i class="dot buy-dot"></i>Buy-side history</h3><div id="buyHistoryList" class="history-list"></div></section><section><h3><i class="dot sell-dot"></i>Sell-side history</h3><div id="sellHistoryList" class="history-list"></div></section></div></div></section>
   <footer><span>Public market data from Gate.io</span><span id="targets">Targets: Buy 500.00 · Sell 300.00 · Total 1,000.00 USDT · repeats every 1 min while low</span></footer>
 </main>
 
@@ -56,7 +56,7 @@
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=19" defer></script>
-<script src="sync.js?v=19" defer></script>
+<script src="app.js?v=20" defer></script>
+<script src="sync.js?v=20" defer></script>
 </body>
 </html>
