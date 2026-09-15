@@ -6,7 +6,7 @@ let largeBuySettings={amount:LARGE_BUY_DEFAULT,levels:LARGE_BUY_LEVELS_DEFAULT},
 let latest = { buy: 0, sell: 0, total: 0, mid: 0, ready: false }, latestDex = null, previousLow = { buy: false, sell: false, total: false, ready: false }, lastAlert = { buy: 0, sell: 0, total: 0 };
 let depthSamples=[], lowSince={buy:0,sell:0,total:0};
 let telegramEnabled=false, telegramConfigured=false, history=[], deferredInstall;
-let orderbookLoading=false;
+let orderbookLoading=false,dexLoading=false;
 
 const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -48,7 +48,7 @@ function rowsHtml(rows,side,mid){const levels=rows.map(([p,a])=>({p,a,value:num(
 function render(book,depth){const ask=num(book.asks?.[0]?.[0]),bid=num(book.bids?.[0]?.[0]),spread=ask-bid,pct=depth.mid?spread/depth.mid*100:0;$("midPrice").textContent=price(depth.mid);$("bestBid").textContent=price(bid);$("bestAsk").textContent=price(ask);$("spread").textContent=`${price(spread)} · ${pct.toFixed(3)}%`;$("centerPrice").textContent=price(depth.mid);$("centerSpread").textContent=`Spread ${pct.toFixed(3)}%`;$("asks").classList.remove("loading");$("asks").innerHTML=rowsHtml([...(book.asks||[])].slice(0,ROWS).reverse(),"ask",depth.mid);$("bids").innerHTML=rowsHtml((book.bids||[]).slice(0,ROWS),"bid",depth.mid);$("buyDepth").textContent=`${money(depth.buy)} / ${money(thresholds.buy)} USDT`;$("sellDepth").textContent=`${money(depth.sell)} / ${money(thresholds.sell)} USDT`;$("totalDepth").textContent=`${money(depth.total)} USDT`;$("buyCard").className=depth.buy<thresholds.buy?"low":"ok";$("sellCard").className=depth.sell<thresholds.sell?"low":"ok";$("totalCard").className=depth.total<thresholds.total?"low":"ok";$("targets").textContent=`Targets: Buy ${money(thresholds.buy)} · Sell ${money(thresholds.sell)} · Total ${money(thresholds.total)} USDT · repeats every 1 min while low`;$("updated").textContent=`Updated ${new Date().toLocaleTimeString()}`;}
 
 function renderDex(){if(!latestDex)return;$("dexPrice").textContent=price(latestDex.price);$("dexCenterPrice").textContent=price(latestDex.price);$("dexSource").textContent=`${latestDex.source} · 24h ${latestDex.change24h>=0?"+":""}${latestDex.change24h.toFixed(2)}%`;if(latest.mid){const difference=(latestDex.price-latest.mid)/latest.mid*100;$("dexDifference").textContent=`DEX ${difference>=0?"+":""}${difference.toFixed(2)}% vs mid`;}}
-async function loadDexPrice(){try{const response=await fetch("/api/dex-price",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"DEX price unavailable");latestDex=data;renderDex();}catch(error){$("dexSource").textContent=error.message;}}
+async function loadDexPrice(){if(dexLoading)return;dexLoading=true;try{const response=await fetch("/api/dex-price",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"DEX price unavailable");latestDex=data;renderDex();}catch(error){$("dexSource").textContent=error.message;}finally{dexLoading=false;}}
 
 async function load(){
   if(orderbookLoading)return;

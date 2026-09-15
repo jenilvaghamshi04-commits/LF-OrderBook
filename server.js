@@ -106,14 +106,18 @@ async function getRawOrderbook(){
 }
 async function getDexPrice(){
   if(dexCache.value&&Date.now()-dexCache.updatedAt<10000)return dexCache.value;
+  if(dexCache.value&&Date.now()-dexCache.updatedAt<300000){if(!dexRequest)refreshDexPrice().catch(()=>{});return {...dexCache.value,source:`${dexCache.value.source.replace(/ · cached$/,'')} · cached`};}
+  return refreshDexPrice();
+}
+async function refreshDexPrice(){
   if(dexRequest)return dexRequest;
   const fromPair=pair=>{if(!Number(pair?.priceUsd))return null;return {price:Number(pair.priceUsd),change24h:Number(pair.priceChange?.h24)||0,liquidity:Number(pair.liquidity?.usd)||0,volume24h:Number(pair.volume?.h24)||0,source:`DexScreener · ${pair.dexId||"DEX"}`,updatedAt:Date.now()};};
-  dexRequest=(async()=>{let lastError;
-    for(const url of [DEX_PAIR_URL,DEX_TOKEN_URL]){try{const upstream=await fetch(url,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json();if(!upstream.ok)throw new Error(`DexScreener ${upstream.status}`);const pairs=[data?.pair,...(data?.pairs||[])].filter(Boolean).sort((a,b)=>(Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0)),value=fromPair(pairs[0]);if(value){dexCache={value,updatedAt:Date.now()};return value;}}catch(error){lastError=error;}}
-    try{const upstream=await fetch(GECKOTERMINAL_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.data?.attributes,price=Number(token?.price_usd);if(!upstream.ok||!price)throw new Error(`GeckoTerminal ${upstream.status}`);const value={price,change24h:Number(token?.price_change_percentage?.h24)||0,liquidity:Number(token?.total_reserve_in_usd)||0,volume24h:Number(token?.volume_usd?.h24)||0,source:"GeckoTerminal",updatedAt:Date.now()};dexCache={value,updatedAt:Date.now()};return value;}catch(error){lastError=error;}
-    try{const upstream=await fetch(COINGECKO_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.[LF_TOKEN_ADDRESS];if(!upstream.ok||!Number(token?.usd))throw new Error(`CoinGecko ${upstream.status}`);const value={price:Number(token.usd),change24h:Number(token.usd_24h_change)||0,liquidity:0,volume24h:Number(token.usd_24h_vol)||0,source:"CoinGecko",updatedAt:Number(token.last_updated_at)*1000||Date.now()};dexCache={value,updatedAt:Date.now()};return value;}catch(error){lastError=error;}
-    if(dexCache.value&&Date.now()-dexCache.updatedAt<300000)return {...dexCache.value,source:`${dexCache.value.source} · cached`};
-    throw new Error(`DEX price is unavailable${lastError?.message?`: ${lastError.message}`:""}`);
+  const dexScreener=async url=>{const upstream=await fetch(url,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json();if(!upstream.ok)throw new Error(`DexScreener ${upstream.status}`);const pairs=[data?.pair,...(data?.pairs||[])].filter(Boolean).sort((a,b)=>(Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0)),value=fromPair(pairs[0]);if(!value)throw new Error("DexScreener returned no LF price");return value;};
+  const geckoTerminal=async()=>{const upstream=await fetch(GECKOTERMINAL_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.data?.attributes,price=Number(token?.price_usd);if(!upstream.ok||!price)throw new Error(`GeckoTerminal ${upstream.status}`);return {price,change24h:Number(token?.price_change_percentage?.h24)||0,liquidity:Number(token?.total_reserve_in_usd)||0,volume24h:Number(token?.volume_usd?.h24)||0,source:"GeckoTerminal",updatedAt:Date.now()};};
+  const coinGecko=async()=>{const upstream=await fetch(COINGECKO_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.[LF_TOKEN_ADDRESS];if(!upstream.ok||!Number(token?.usd))throw new Error(`CoinGecko ${upstream.status}`);return {price:Number(token.usd),change24h:Number(token.usd_24h_change)||0,liquidity:0,volume24h:Number(token.usd_24h_vol)||0,source:"CoinGecko",updatedAt:Number(token.last_updated_at)*1000||Date.now()};};
+  dexRequest=(async()=>{try{const value=await Promise.any([dexScreener(DEX_PAIR_URL),dexScreener(DEX_TOKEN_URL),geckoTerminal(),coinGecko()]);dexCache={value,updatedAt:Date.now()};return value;}catch(error){
+    if(dexCache.value)return {...dexCache.value,source:`${dexCache.value.source.replace(/ · cached$/,'')} · cached`};
+    throw new Error("DEX price is unavailable from all providers");}
   })().finally(()=>{dexRequest=null;});
   return dexRequest;
 }
