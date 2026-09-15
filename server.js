@@ -26,7 +26,15 @@ const telegramLowSince = new Map();
 const CONFIRM_LOW_MS = 60000;
 const depthSampleWindow = [];
 const DEX_PAIR_URL = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0xb37361ebebfe7e0f0d98300f0a8ae777daa1cc12";
+const LF_TOKEN_ADDRESS = "0x957c7fa189a408e78543113412f6ae1a9b4022c4";
+const DEX_TOKEN_URL = `https://api.dexscreener.com/latest/dex/tokens/${LF_TOKEN_ADDRESS}`;
+const GECKOTERMINAL_URL = `https://api.geckoterminal.com/api/v2/networks/eth/tokens/${LF_TOKEN_ADDRESS}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=0x957c7fA189a408E78543113412f6Ae1a9b4022C4&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true&include_last_updated_at=true";
+const API_HEADERS = {Accept:"application/json", "User-Agent":"LF-OrderBook/1.0"};
+let orderbookCache={book:null,updatedAt:0};
+let orderbookRequest=null;
+let dexCache={value:null,updatedAt:0};
+let dexRequest=null;
 let telegramMuted = false;
 let telegramUpdateOffset = 0;
 let telegramPolling = false;
@@ -87,20 +95,27 @@ async function getDepthSnapshot(){
   return {buy,sell,total:buy+sell,bid,ask,mid};
 }
 async function getRawOrderbook(){
-  const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)}),book=await upstream.json();
-  if(!upstream.ok||!Array.isArray(book?.bids)||!Array.isArray(book?.asks))throw new Error("Gate.io order book is unavailable");
-  return book;
+  const now=Date.now();
+  if(orderbookCache.book&&now-orderbookCache.updatedAt<750)return orderbookCache.book;
+  if(orderbookRequest)return orderbookRequest;
+  orderbookRequest=(async()=>{try{const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),book=await upstream.json();
+    if(!upstream.ok||!Array.isArray(book?.bids)||!Array.isArray(book?.asks))throw new Error("Gate.io order book is unavailable");
+    orderbookCache={book,updatedAt:Date.now()};return book;
+  }catch(error){if(orderbookCache.book&&Date.now()-orderbookCache.updatedAt<15000)return orderbookCache.book;throw error;}finally{orderbookRequest=null;}})();
+  return orderbookRequest;
 }
 async function getDexPrice(){
-  try{
-    const upstream=await fetch(DEX_PAIR_URL,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)}),data=await upstream.json(),pair=data?.pair;
-    if(!upstream.ok||!Number(pair?.priceUsd))throw new Error("DEX price unavailable");
-    return {price:Number(pair.priceUsd),change24h:Number(pair.priceChange?.h24)||0,liquidity:Number(pair.liquidity?.usd)||0,volume24h:Number(pair.volume?.h24)||0,source:`DexScreener · ${pair.dexId||"DEX"}`,updatedAt:Date.now()};
-  }catch(error){
-    const upstream=await fetch(COINGECKO_URL,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)}),data=await upstream.json(),token=data?.["0x957c7fa189a408e78543113412f6ae1a9b4022c4"];
-    if(!upstream.ok||!Number(token?.usd))throw new Error("DEX price is unavailable");
-    return {price:Number(token.usd),change24h:Number(token.usd_24h_change)||0,liquidity:0,volume24h:Number(token.usd_24h_vol)||0,source:"CoinGecko fallback",updatedAt:Number(token.last_updated_at)*1000||Date.now()};
-  }
+  if(dexCache.value&&Date.now()-dexCache.updatedAt<10000)return dexCache.value;
+  if(dexRequest)return dexRequest;
+  const fromPair=pair=>{if(!Number(pair?.priceUsd))return null;return {price:Number(pair.priceUsd),change24h:Number(pair.priceChange?.h24)||0,liquidity:Number(pair.liquidity?.usd)||0,volume24h:Number(pair.volume?.h24)||0,source:`DexScreener · ${pair.dexId||"DEX"}`,updatedAt:Date.now()};};
+  dexRequest=(async()=>{let lastError;
+    for(const url of [DEX_PAIR_URL,DEX_TOKEN_URL]){try{const upstream=await fetch(url,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json();if(!upstream.ok)throw new Error(`DexScreener ${upstream.status}`);const pairs=[data?.pair,...(data?.pairs||[])].filter(Boolean).sort((a,b)=>(Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0)),value=fromPair(pairs[0]);if(value){dexCache={value,updatedAt:Date.now()};return value;}}catch(error){lastError=error;}}
+    try{const upstream=await fetch(GECKOTERMINAL_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.data?.attributes,price=Number(token?.price_usd);if(!upstream.ok||!price)throw new Error(`GeckoTerminal ${upstream.status}`);const value={price,change24h:Number(token?.price_change_percentage?.h24)||0,liquidity:Number(token?.total_reserve_in_usd)||0,volume24h:Number(token?.volume_usd?.h24)||0,source:"GeckoTerminal",updatedAt:Date.now()};dexCache={value,updatedAt:Date.now()};return value;}catch(error){lastError=error;}
+    try{const upstream=await fetch(COINGECKO_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.[LF_TOKEN_ADDRESS];if(!upstream.ok||!Number(token?.usd))throw new Error(`CoinGecko ${upstream.status}`);const value={price:Number(token.usd),change24h:Number(token.usd_24h_change)||0,liquidity:0,volume24h:Number(token.usd_24h_vol)||0,source:"CoinGecko",updatedAt:Number(token.last_updated_at)*1000||Date.now()};dexCache={value,updatedAt:Date.now()};return value;}catch(error){lastError=error;}
+    if(dexCache.value&&Date.now()-dexCache.updatedAt<300000)return {...dexCache.value,source:`${dexCache.value.source} · cached`};
+    throw new Error(`DEX price is unavailable${lastError?.message?`: ${lastError.message}`:""}`);
+  })().finally(()=>{dexRequest=null;});
+  return dexRequest;
 }
 function telegramBookChunks(book,side,count,dex){
   const asks=book.asks||[],bids=book.bids||[],ask=Number(asks[0]?.[0]),bid=Number(bids[0]?.[0]),mid=ask&&bid?(ask+bid)/2:0;
@@ -208,17 +223,13 @@ async function monitorDepth(){
 
 async function orderbook(res) {
   try {
-    const upstream = await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true", {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(10000)
-    });
-    const body = await upstream.text();
-    res.writeHead(upstream.status, {
+    const book=await getRawOrderbook();
+    res.writeHead(200, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       "Access-Control-Allow-Origin": "*"
     });
-    res.end(body);
+    res.end(JSON.stringify(book));
   } catch {
     res.writeHead(502, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
     res.end(JSON.stringify({ message: "Could not connect to Gate.io" }));
