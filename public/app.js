@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 2, CONFIRM_LOW_MS = 10000, MEDIAN_SAMPLES = 7;
+const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 2, CONFIRM_LOW_MS = 5000, MEDIAN_SAMPLES = 5;
 const keys = { buy: "lf-orderbook-buy-depth-threshold", sell: "lf-orderbook-sell-depth-threshold", total: "lf-orderbook-total-depth-threshold", largeBuy: "lf-orderbook-large-buy-threshold", largeBuyLevels: "lf-orderbook-large-buy-levels", legacy: "lf-orderbook-depth-threshold", sound: "lf-orderbook-sound", tone: "lf-orderbook-sound-tone", telegram: "lf-orderbook-telegram", history: "lf-orderbook-depth-history", theme: "lf-orderbook-theme" };
 let thresholds = { buy: DEFAULT, sell: DEFAULT, total: TOTAL_DEFAULT }, soundEnabled = false, soundTone = "chime", audio, alarmTimer, alarmStopTimer;
 let largeBuySettings={amount:LARGE_BUY_DEFAULT,levels:LARGE_BUY_LEVELS_DEFAULT}, activeLargeBuys=new Set(), largeBuySeen=new Map();
@@ -56,12 +56,17 @@ function renderDex(){if(!latestDex)return;$("dexPrice").textContent=price(latest
 async function loadDexPrice(){if(dexLoading)return;dexLoading=true;try{const response=await fetch("/api/dex-price",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"DEX price unavailable");latestDex=data;renderDex();}catch(error){$("dexSource").textContent=error.message;}finally{dexLoading=false;}}
 async function loadLastTrade(){if(tradeLoading)return;tradeLoading=true;try{const response=await fetch("/api/last-trade",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"Last trade unavailable");latestTrade=data;$("lastTradePrice").textContent=price(data.price);$("centerTradePrice").textContent=price(data.price);const time=data.timestamp?new Date(data.timestamp).toLocaleTimeString():"live";$("lastTradeMeta").textContent=`${data.side?data.side.toUpperCase()+" · ":""}${time}`;renderDex();}catch(error){$("lastTradeMeta").textContent=error.message;}finally{tradeLoading=false;}}
 
+async function fetchFastMarket(){
+  const direct=async()=>{const [bookResponse,tradeResponse]=await Promise.all([fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{cache:"no-store"}),fetch("https://api.gateio.ws/api/v4/spot/trades?currency_pair=LF_USDT&limit=1",{cache:"no-store"})]),book=await bookResponse.json(),trades=await tradeResponse.json(),trade=trades?.[0];if(!bookResponse.ok||!tradeResponse.ok||!Array.isArray(book.bids)||!Array.isArray(book.asks)||!num(trade?.price))throw new Error("Direct Gate.io feed unavailable");return {book,lastTrade:{price:num(trade.price),amount:num(trade.amount),side:trade.side||"",tradeId:String(trade.id||""),timestamp:num(trade.create_time_ms)||num(trade.create_time)*1000||Date.now(),source:"Gate.io direct"},feed:"direct"};};
+  const server=async()=>{const response=await fetch("/api/market",{cache:"no-store"}),market=await response.json();if(!response.ok)throw new Error(market.message||"Market data unavailable");return {...market,feed:"server"};};
+  return Promise.any([direct(),server()]);
+}
+
 async function load(){
   if(orderbookLoading)return;
   orderbookLoading=true;
   try{
-    const response=await fetch("/api/market",{cache:"no-store"}),market=await response.json();
-    if(!response.ok)throw new Error(market.message||"Market data unavailable");
+    const market=await fetchFastMarket();
     const book=market.book;latestTrade=market.lastTrade;$("lastTradePrice").textContent=price(latestTrade.price);$("centerTradePrice").textContent=price(latestTrade.price);$("lastTradeMeta").textContent=`${latestTrade.side?latestTrade.side.toUpperCase()+" · ":""}${new Date(latestTrade.timestamp).toLocaleTimeString()}`;
     const rawDepth=calculate(book,latestTrade.price);if(!rawDepth.mid)throw new Error("Invalid last trade reference");
     const depth=stabilize(rawDepth);latest={buy:depth.buy,sell:depth.sell,total:depth.total,mid:depth.mid,ready:true};addHistory(depth);
@@ -71,7 +76,7 @@ async function load(){
     const largeBuys=findLargeBuys(book),currentLargeBuys=new Set(largeBuys.map(order=>order.key)),newLargeBuys=[];
     for(const order of largeBuys){const count=(largeBuySeen.get(order.key)||0)+1;largeBuySeen.set(order.key,count);if(count>=LOW_CONFIRMATIONS&&!activeLargeBuys.has(order.key)){activeLargeBuys.add(order.key);newLargeBuys.push(order);}}
     for(const key of [...largeBuySeen.keys()])if(!currentLargeBuys.has(key)){largeBuySeen.delete(key);activeLargeBuys.delete(key);}
-    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,depth);renderDex();$("connection").textContent="Live · Gate.io + DEX · last-trade depth";$("liveDot").classList.remove("offline");
+    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,depth);renderDex();$("connection").textContent=`Live · Gate.io ${market.feed==="direct"?"direct":"fallback"} · last-trade depth`;$("liveDot").classList.remove("offline");
   }catch(e){$("connection").textContent="Connection issue";$("liveDot").classList.add("offline");$("updated").textContent=e.message;}finally{orderbookLoading=false;}
 }
 
