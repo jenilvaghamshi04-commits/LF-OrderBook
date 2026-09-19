@@ -38,6 +38,13 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .panel-title>div{gap:9px}
 .panel-title h1{margin:0;font-size:16px}
 .activity{color:var(--green)}
+.pressure-meter{display:grid;grid-template-columns:auto minmax(120px,1fr) auto;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--line);background:#080d0a}
+.pressure-meter strong{font:700 13px ui-monospace,monospace;white-space:nowrap}
+.pressure-buy{color:#25dca0}.pressure-sell{color:#ff6478}
+.pressure-track{display:flex;height:9px;overflow:hidden;border-radius:99px;background:#1a211d}
+.pressure-track i{display:block;height:100%;transition:width .25s ease}
+.pressure-buy-bar{background:#28cea0;clip-path:polygon(0 0,100% 0,calc(100% - 5px) 100%,0 100%)}
+.pressure-sell-bar{margin-left:-3px;background:#f75470;clip-path:polygon(5px 0,100% 0,100% 100%,0 100%)}
 .columns,.book-row{display:grid;grid-template-columns:1.05fr 1fr 1fr;align-items:center}
 .columns{height:39px;padding:0 20px;color:#68746e;font-size:11px;text-transform:uppercase}
 .columns span:not(:first-child),.book-row span:not(:first-child){text-align:right}
@@ -130,6 +137,9 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .market-strip div:nth-child(2),.market-strip div:nth-child(4),.market-strip div:nth-child(6){border-right:0}
 .market-strip div:nth-child(-n+4){border-bottom:1px solid var(--line)}
 .market-strip strong{font-size:12px}
+.pressure-meter{gap:7px;padding:9px 10px}
+.pressure-meter strong{font-size:11px}
+.pressure-track{height:8px}
 .book-cumulative{right:6px;left:6px;min-width:0;grid-template-columns:1fr repeat(3,auto);gap:6px;padding:5px 7px}
 .book-cumulative small{font-size:8px}
 .book-cumulative em{font-size:6.5px}
@@ -207,6 +217,7 @@ dialog form{padding:18px}
 [data-theme="light"] .source button:hover{background:#e9f1ec}
 [data-theme="light"] .source button.enabled{background:var(--green);color:#fff}
 [data-theme="light"] .orderbook,[data-theme="light"] .market-strip,[data-theme="light"] .chart-panel{box-shadow:0 10px 32px #17442a0d}
+[data-theme="light"] .pressure-meter{background:#f7faf8}
 [data-theme="light"] .spread-line{background:#f1f7f3}
 [data-theme="light"] .liquidity-totals>span{background:#fff}
 [data-theme="light"] dialog{background:#fff;box-shadow:0 24px 90px #132b1e33}

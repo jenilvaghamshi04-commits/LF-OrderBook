@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=26">
+  <link rel="stylesheet" href="styles.css?v=27">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -23,6 +23,7 @@
 
   <section class="orderbook">
     <div class="panel-title"><div><span class="activity">⌁</span><h1>Order book</h1></div><span id="updated">Connecting…</span></div>
+    <div id="pressureMeter" class="pressure-meter" role="meter" aria-label="Buy and sell pressure within 2 percent" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><strong class="pressure-buy">B <span id="buyPressure">50.00%</span></strong><div class="pressure-track"><i id="buyPressureBar" class="pressure-buy-bar" style="width:50%"></i><i id="sellPressureBar" class="pressure-sell-bar" style="width:50%"></i></div><strong class="pressure-sell"><span id="sellPressure">50.00%</span> S</strong></div>
     <div class="columns"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div>
     <div id="asks" class="book-rows loading">Loading market depth…</div>
     <div class="price-board"><div class="mid-price-box"><small>Last Trade Price (Gate.io)</small><strong id="centerTradePrice">—</strong></div><div class="dex-price-box"><small>DEX Price</small><strong id="dexCenterPrice">—</strong></div><em id="dexDifference">DEX difference —</em></div>
@@ -56,7 +57,7 @@
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=26" defer></script>
-<script src="sync.js?v=26" defer></script>
+<script src="app.js?v=27" defer></script>
+<script src="sync.js?v=27" defer></script>
 </body>
 </html>
