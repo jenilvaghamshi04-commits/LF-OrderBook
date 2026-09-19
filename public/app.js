@@ -6,7 +6,7 @@ let largeBuySettings={amount:LARGE_BUY_DEFAULT,levels:LARGE_BUY_LEVELS_DEFAULT},
 let latest = { buy: 0, sell: 0, total: 0, mid: 0, ready: false }, latestDex = null, previousLow = { buy: false, sell: false, total: false, ready: false }, lastAlert = { buy: 0, sell: 0, total: 0 };
 let depthSamples=[], lowSince={buy:0,sell:0,total:0};
 let telegramEnabled=false, telegramConfigured=false, history=[], deferredInstall;
-let orderbookLoading=false,dexLoading=false;
+let orderbookLoading=false,dexLoading=false,exchangeVolumeLoading=false;
 let tradeLoading=false,latestTrade=null;
 let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates=[],streamReconnect=null,lastStreamRender=0;
 
@@ -14,6 +14,7 @@ const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
 const price = (v) => { const n=num(v); return n >= 1 ? n.toLocaleString(undefined,{maximumFractionDigits:6}) : n.toLocaleString(undefined,{minimumFractionDigits:6,maximumFractionDigits:10}); };
 const amount = (v) => num(v).toLocaleString(undefined,{maximumFractionDigits:2});
+const marketAmount = (v) => num(v).toLocaleString(undefined,{maximumFractionDigits:2});
 
 function calculate(book,referencePrice) {
   const reference=num(referencePrice);
@@ -55,6 +56,7 @@ function render(book,depth){const ask=num(book.asks?.[0]?.[0]),bid=num(book.bids
 
 function renderDex(){if(!latestDex)return;$("dexPrice").textContent=price(latestDex.price);$("dexCenterPrice").textContent=price(latestDex.price);$("dexSource").textContent=`${latestDex.source} · 24h ${latestDex.change24h>=0?"+":""}${latestDex.change24h.toFixed(2)}%`;if(latestTrade?.price){const difference=(latestDex.price-latestTrade.price)/latestTrade.price*100;$("dexDifference").textContent=`DEX ${difference>=0?"+":""}${difference.toFixed(2)}% vs last trade`;}}
 async function loadDexPrice(){if(dexLoading)return;dexLoading=true;try{const response=await fetch("/api/dex-price",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"DEX price unavailable");latestDex=data;renderDex();}catch(error){$("dexSource").textContent=error.message;}finally{dexLoading=false;}}
+async function loadExchangeVolume(){if(exchangeVolumeLoading)return;exchangeVolumeLoading=true;try{const response=await fetch("/api/exchange-volume",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"Exchange volume unavailable");$("exchangeVolume").textContent=`${marketAmount(data.quoteVolume)} USDT`;$("exchangeVolumeQty").textContent=`${marketAmount(data.baseVolume)} LF · ${data.source}`;}catch(error){$("exchangeVolume").textContent="—";$("exchangeVolumeQty").textContent=error.message;}finally{exchangeVolumeLoading=false;}}
 async function loadLastTrade(){if(tradeLoading)return;tradeLoading=true;try{const response=await fetch("/api/last-trade",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"Last trade unavailable");latestTrade=data;$("lastTradePrice").textContent=price(data.price);$("centerTradePrice").textContent=price(data.price);const time=data.timestamp?new Date(data.timestamp).toLocaleTimeString():"live";$("lastTradeMeta").textContent=`${data.side?data.side.toUpperCase()+" · ":""}${time}`;renderDex();}catch(error){$("lastTradeMeta").textContent=error.message;}finally{tradeLoading=false;}}
 
 async function fetchFastMarket(){
@@ -94,5 +96,6 @@ function updateSoundButton(){$("soundBtn").innerHTML=soundEnabled?"🔊 <b>Sound
 function applyTheme(theme){document.documentElement.dataset.theme=theme;localStorage.setItem(keys.theme,theme);const light=theme==="light";$("themeBtn").innerHTML=light?"🌙 <b>Dark</b>":"☀️ <b>Light</b>";$("themeBtn").title=light?"Switch to dark theme":"Switch to light theme";$("themeBtn").setAttribute("aria-label",$("themeBtn").title);document.querySelector('meta[name="theme-color"]').content=light?"#f4f7f5":"#060806";drawChart();}
 document.addEventListener("DOMContentLoaded",init);
 document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();setInterval(loadDexPrice,10000);});
+document.addEventListener("DOMContentLoaded",()=>{loadExchangeVolume();setInterval(loadExchangeVolume,15000);});
 document.addEventListener("DOMContentLoaded",()=>{$("clearHistory").onclick=()=>{history=[];localStorage.removeItem(keys.history);drawChart();};});
 document.addEventListener("DOMContentLoaded",()=>{connectMarketStream();document.addEventListener("pointerdown",()=>{if(soundEnabled)getAudio().resume().catch(()=>{});},{passive:true});});

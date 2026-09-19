@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -19,7 +19,7 @@
     <div class="source"><i id="liveDot" class="live-dot"></i><span id="connection">Live · Gate.io</span><button id="installBtn" class="wide hidden" title="Install app">⬇ <b>Install</b></button><button id="themeBtn" class="wide" title="Switch to light theme" aria-label="Switch to light theme">☀️ <b>Light</b></button><button id="soundBtn" class="wide" title="Toggle sound">🔇 <b>Sound off</b></button><button id="testBtn" class="wide" title="Test sound" disabled>🔔 <b>Test</b></button><button id="settingsBtn" title="Depth settings">⚙</button><button id="refreshBtn" title="Refresh">↻</button></div>
   </header>
 
-  <section class="market-strip"><div class="dex-card"><span>DEX price</span><strong id="dexPrice">—</strong><small id="dexSource">Loading DEX…</small></div><div><span>Last trade price</span><strong id="lastTradePrice">—</strong><small id="lastTradeMeta">Loading latest trade…</small></div><div><span>Best bid</span><strong id="bestBid" class="buy-text">—</strong></div><div><span>Best ask</span><strong id="bestAsk" class="sell-text">—</strong></div><div><span>Spread</span><strong id="spread">—</strong></div></section>
+  <section class="market-strip"><div class="dex-card"><span>DEX price</span><strong id="dexPrice">—</strong><small id="dexSource">Loading DEX…</small></div><div><span>Last trade price</span><strong id="lastTradePrice">—</strong><small id="lastTradeMeta">Loading latest trade…</small></div><div><span>Best bid</span><strong id="bestBid" class="buy-text">—</strong></div><div><span>Best ask</span><strong id="bestAsk" class="sell-text">—</strong></div><div><span>Spread</span><strong id="spread">—</strong></div><div class="volume-card"><span>Exchange volume (24h)</span><strong id="exchangeVolume">—</strong><small id="exchangeVolumeQty">Loading Gate.io volume…</small></div></section>
 
   <section class="orderbook">
     <div class="panel-title"><div><span class="activity">⌁</span><h1>Order book</h1></div><span id="updated">Connecting…</span></div>
@@ -56,7 +56,7 @@
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=25" defer></script>
-<script src="sync.js?v=25" defer></script>
+<script src="app.js?v=26" defer></script>
+<script src="sync.js?v=26" defer></script>
 </body>
 </html>

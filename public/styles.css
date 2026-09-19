@@ -20,7 +20,7 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .source button:disabled{opacity:.4}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
 .live-dot.offline{background:var(--red);box-shadow:none}
-.market-strip{display:grid;grid-template-columns:1.25fr repeat(4,1fr);margin:24px 0 14px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
+.market-strip{display:grid;grid-template-columns:1.25fr repeat(5,1fr);margin:24px 0 14px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
 .market-strip div{display:grid;gap:6px;padding:17px 20px;border-right:1px solid var(--line)}
 .market-strip div:last-child{border:0}
 .market-strip span,.panel-title>span{color:var(--muted);font-size:12px}
@@ -28,6 +28,9 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .market-strip .dex-card{background:linear-gradient(135deg,#3b82f612,#00e89d0b)}
 .market-strip .dex-card strong{color:#60a5fa}
 .market-strip .dex-card small{color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.market-strip .volume-card{background:linear-gradient(135deg,#22c55e0a,#3b82f60d)}
+.market-strip .volume-card strong{color:#8fddb8}
+.market-strip .volume-card small{color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .buy-text{color:var(--green)}
 .sell-text{color:var(--red)}
 .orderbook{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
@@ -124,9 +127,8 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .source button,.source button.wide{width:36px;min-width:36px;padding:0}
 .market-strip{grid-template-columns:1fr 1fr;margin:12px 0 10px;border-radius:12px}
 .market-strip div{padding:12px 10px}
-.market-strip div:nth-child(2),.market-strip div:nth-child(4){border-right:0}
+.market-strip div:nth-child(2),.market-strip div:nth-child(4),.market-strip div:nth-child(6){border-right:0}
 .market-strip div:nth-child(-n+4){border-bottom:1px solid var(--line)}
-.market-strip div:last-child{grid-column:1/-1}
 .market-strip strong{font-size:12px}
 .book-cumulative{right:6px;left:6px;min-width:0;grid-template-columns:1fr repeat(3,auto);gap:6px;padding:5px 7px}
 .book-cumulative small{font-size:8px}

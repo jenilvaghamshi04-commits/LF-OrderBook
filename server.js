@@ -37,6 +37,8 @@ let dexCache={value:null,updatedAt:0};
 let dexRequest=null;
 let lastTradeCache={value:null,updatedAt:0};
 let lastTradeRequest=null;
+let exchangeVolumeCache={value:null,updatedAt:0};
+let exchangeVolumeRequest=null;
 let telegramMuted = false;
 let telegramUpdateOffset = 0;
 let telegramPolling = false;
@@ -118,6 +120,15 @@ async function getLastTrade(){
     const value={price,amount:Number(trade.amount)||0,side:trade.side||"",tradeId:String(trade.id||""),timestamp:Number(trade.create_time_ms)||Number(trade.create_time)*1000||Date.now(),source:"Gate.io last completed trade"};lastTradeCache={value,updatedAt:Date.now()};return value;
   }catch(error){if(lastTradeCache.value&&Date.now()-lastTradeCache.updatedAt<15000)return {...lastTradeCache.value,source:"Gate.io last completed trade · cached"};throw error;}finally{lastTradeRequest=null;}})();
   return lastTradeRequest;
+}
+async function getExchangeVolume(){
+  if(exchangeVolumeCache.value&&Date.now()-exchangeVolumeCache.updatedAt<15000)return exchangeVolumeCache.value;
+  if(exchangeVolumeRequest)return exchangeVolumeRequest;
+  exchangeVolumeRequest=(async()=>{try{const upstream=await fetch("https://api.gateio.ws/api/v4/spot/tickers?currency_pair=LF_USDT",{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),tickers=await upstream.json(),ticker=tickers?.[0],baseVolume=Number(ticker?.base_volume),quoteVolume=Number(ticker?.quote_volume);
+    if(!upstream.ok||!Number.isFinite(baseVolume)||!Number.isFinite(quoteVolume))throw new Error("Gate.io exchange volume is unavailable");
+    const value={baseVolume,quoteVolume,period:"24h",source:"Gate.io",updatedAt:Date.now()};exchangeVolumeCache={value,updatedAt:Date.now()};return value;
+  }catch(error){if(exchangeVolumeCache.value&&Date.now()-exchangeVolumeCache.updatedAt<300000)return {...exchangeVolumeCache.value,source:"Gate.io · cached"};throw error;}finally{exchangeVolumeRequest=null;}})();
+  return exchangeVolumeRequest;
 }
 async function getDexPrice(){
   if(dexCache.value&&Date.now()-dexCache.updatedAt<10000)return dexCache.value;
@@ -256,6 +267,7 @@ async function orderbook(res) {
 }
 async function dexPriceApi(res){try{return json(res,200,await getDexPrice());}catch(error){return json(res,502,{message:error.message||"DEX price unavailable"});}}
 async function lastTradeApi(res){try{return json(res,200,await getLastTrade());}catch(error){return json(res,502,{message:error.message||"Last trade unavailable"});}}
+async function exchangeVolumeApi(res){try{return json(res,200,await getExchangeVolume());}catch(error){return json(res,502,{message:error.message||"Exchange volume unavailable"});}}
 async function marketApi(res){try{const [book,lastTrade]=await Promise.all([getRawOrderbook(),getLastTrade()]);return json(res,200,{book,lastTrade,serverTime:Date.now()});}catch(error){return json(res,502,{message:error.message||"Market data unavailable"});}}
 
 const server = http.createServer(async (req, res) => {
@@ -263,6 +275,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/orderbook") return orderbook(res);
   if (pathname === "/api/dex-price") return dexPriceApi(res);
   if (pathname === "/api/last-trade") return lastTradeApi(res);
+  if (pathname === "/api/exchange-volume") return exchangeVolumeApi(res);
   if (pathname === "/api/market") return marketApi(res);
   if (pathname === "/api/telegram") return telegram(req, res);
   if (pathname === "/api/settings") return settingsApi(req, res);
