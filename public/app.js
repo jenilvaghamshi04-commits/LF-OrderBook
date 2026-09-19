@@ -81,14 +81,14 @@ async function load(){
     const book=market.book;latestTrade=market.lastTrade;$("lastTradePrice").textContent=price(latestTrade.price);$("centerTradePrice").textContent=price(latestTrade.price);$("lastTradeMeta").textContent=`${latestTrade.side?latestTrade.side.toUpperCase()+" · ":""}${new Date(latestTrade.timestamp).toLocaleTimeString()}`;
     if(streamSocket?.readyState===WebSocket.OPEN&&!streamReady)seedStreamBook(book);
     const rawDepth=calculate(book,latestTrade.price);if(!rawDepth.mid)throw new Error("Invalid last trade reference");
-    const depth=stabilize(rawDepth);latest={buy:depth.buy,sell:depth.sell,total:depth.total,mid:depth.mid,ready:true};addHistory(depth);
-    const low={buy:depth.buy<thresholds.buy,sell:depth.sell<thresholds.sell,total:depth.total<thresholds.total},now=Date.now(),detected=[];
+    const alertDepth=stabilize(rawDepth);latest={buy:rawDepth.buy,sell:rawDepth.sell,total:rawDepth.total,mid:rawDepth.mid,ready:true};addHistory(alertDepth);
+    const low={buy:alertDepth.buy<thresholds.buy,sell:alertDepth.sell<thresholds.sell,total:alertDepth.total<thresholds.total},now=Date.now(),detected=[];
     for(const side of ["buy","sell","total"]){if(low[side]&&!lowSince[side])lowSince[side]=now;if(!low[side])lowSince[side]=0;const confirmed=low[side]&&now-lowSince[side]>=CONFIRM_LOW_MS,due=!previousLow.ready||!previousLow[side]||now-lastAlert[side]>=REPEAT;if(confirmed&&due){detected.push(side);lastAlert[side]=now;}if(!low[side])lastAlert[side]=0;previousLow[side]=confirmed;}
-    previousLow.ready=true;detected.forEach(side=>{showAlert(side,depth[side],thresholds[side]);sendTelegram(side,depth[side],thresholds[side]);});
+    previousLow.ready=true;detected.forEach(side=>{showAlert(side,alertDepth[side],thresholds[side]);sendTelegram(side,alertDepth[side],thresholds[side]);});
     const largeBuys=findLargeBuys(book),currentLargeBuys=new Set(largeBuys.map(order=>order.key)),newLargeBuys=[];
     for(const order of largeBuys){const count=(largeBuySeen.get(order.key)||0)+1;largeBuySeen.set(order.key,count);if(count>=LOW_CONFIRMATIONS&&!activeLargeBuys.has(order.key)){activeLargeBuys.add(order.key);newLargeBuys.push(order);}}
     for(const key of [...largeBuySeen.keys()])if(!currentLargeBuys.has(key)){largeBuySeen.delete(key);activeLargeBuys.delete(key);}
-    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,depth);renderDex();$("connection").textContent=`Live · Gate.io ${market.feed==="WebSocket"?"WebSocket":market.feed==="direct"?"direct":"fallback"} · last-trade depth`;$("liveDot").classList.remove("offline");
+    newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();render(book,rawDepth);renderDex();$("connection").textContent=`Live · Gate.io ${market.feed==="WebSocket"?"WebSocket":market.feed==="direct"?"direct":"fallback"} · last-trade depth`;$("liveDot").classList.remove("offline");
   }catch(e){$("connection").textContent="Connection issue";$("liveDot").classList.add("offline");$("updated").textContent=e.message;}finally{orderbookLoading=false;}
 }
 
