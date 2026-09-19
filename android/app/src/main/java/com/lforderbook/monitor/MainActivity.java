@@ -23,7 +23,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
-    private static final String MONITOR_URL = "https://lf-orderbook1.onrender.com/?app=android&release=24";
+    private static final String MONITOR_URL = "https://lf-orderbook1.onrender.com/?app=android&release=25";
     private WebView webView;
 
     @SuppressLint("SetJavaScriptEnabled")
