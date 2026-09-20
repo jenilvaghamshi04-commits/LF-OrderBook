@@ -1,4 +1,4 @@
-const CACHE="lf-orderbook-v34",ASSETS=["/","/styles.css?v=34","/app.js?v=34","/intelligence.js?v=34","/sync.js?v=34","/favicon.svg","/manifest.webmanifest"];
+const CACHE="lf-orderbook-v35",ASSETS=["/","/styles.css?v=35","/app.js?v=35","/intelligence.js?v=35","/sync.js?v=35","/favicon.svg","/manifest.webmanifest"];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener("fetch",event=>{if(event.request.method!=="GET"||new URL(event.request.url).pathname.startsWith("/api/"))return;event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));return response;}).catch(()=>caches.match(event.request)));});
