@@ -10,6 +10,7 @@ const files = {
   "/index.html": ["index.html", "text/html; charset=utf-8"],
   "/styles.css": ["styles.css", "text/css; charset=utf-8"],
   "/app.js": ["app.js", "text/javascript; charset=utf-8"],
+  "/intelligence.js": ["intelligence.js", "text/javascript; charset=utf-8"],
   "/sync.js": ["sync.js", "text/javascript; charset=utf-8"],
   "/favicon.svg": ["favicon.svg", "image/svg+xml"],
   "/manifest.webmanifest": ["manifest.webmanifest", "application/manifest+json"],
