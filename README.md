@@ -48,7 +48,7 @@ The website and Telegram use one server-side setting. Changing buy, sell, or tot
 ## Added features
 
 - Installable PWA for Android, iPhone, and desktop
-- Local buy/sell depth history chart with 5, 15, 30, and 60-minute views
+- Separate buy/sell shortage-history boxes that record only below-target events
 - Server-side Telegram low-depth alerts without exposing the bot token
 - Five selectable alarm tones with an in-settings preview button
 - Live DEX buy/sell execution-average estimate using trade size and pool liquidity
