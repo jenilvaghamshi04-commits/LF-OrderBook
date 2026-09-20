@@ -1,6 +1,6 @@
 # LF Orderbook — Render version
 
-The monitor compares the Gate.io orderbook mid price with the LF DEX price and supports full orderbook viewing through Telegram. See `V15-DEX-TELEGRAM-ORDERBOOK.md` for the new commands.
+The monitor compares the Gate.io last-trade price with the live LF/WETH liquidity-pool price and supports full orderbook viewing through Telegram. The pool price is calculated as `LF price in WETH × live ETH/USD`, using pool `0xb37361EbEBfE7E0F0D98300f0a8aE777daa1cc12`. See `V15-DEX-TELEGRAM-ORDERBOOK.md` for the Telegram commands.
 
 Lightweight LF/USDT depth monitor built for Render's free Web Service tier. It has no npm dependencies and no build step.
 

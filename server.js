@@ -27,6 +27,12 @@ const CONFIRM_LOW_MS = 60000;
 const depthSampleWindow = [];
 const DEX_PAIR_URL = "https://api.dexscreener.com/latest/dex/pairs/ethereum/0xb37361ebebfe7e0f0d98300f0a8ae777daa1cc12";
 const LF_TOKEN_ADDRESS = "0x957c7fa189a408e78543113412f6ae1a9b4022c4";
+const WETH_TOKEN_ADDRESS = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+const ETH_USD_URLS = [
+  "https://api.coinbase.com/v2/prices/ETH-USD/spot",
+  "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT",
+  "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
+];
 const DEX_TOKEN_URL = `https://api.dexscreener.com/latest/dex/tokens/${LF_TOKEN_ADDRESS}`;
 const GECKOTERMINAL_URL = `https://api.geckoterminal.com/api/v2/networks/eth/tokens/${LF_TOKEN_ADDRESS}`;
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=0x957c7fA189a408E78543113412f6Ae1a9b4022C4&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true&include_last_updated_at=true";
@@ -137,11 +143,28 @@ async function getDexPrice(){
 }
 async function refreshDexPrice(){
   if(dexRequest)return dexRequest;
-  const fromPair=pair=>{if(!Number(pair?.priceUsd))return null;return {price:Number(pair.priceUsd),change24h:Number(pair.priceChange?.h24)||0,liquidity:Number(pair.liquidity?.usd)||0,volume24h:Number(pair.volume?.h24)||0,source:`DexScreener · ${pair.dexId||"DEX"}`,updatedAt:Date.now()};};
+  const getEthUsd=async()=>{
+    const requests=ETH_USD_URLS.map(async url=>{const upstream=await fetch(url,{headers:API_HEADERS,signal:AbortSignal.timeout(6000)}),data=await upstream.json();if(!upstream.ok)throw new Error(`ETH feed ${upstream.status}`);const price=Number(data?.data?.amount||data?.price||data?.ethereum?.usd);if(!price)throw new Error("Invalid ETH/USD price");return price;});
+    return Promise.any(requests);
+  };
+  const poolPrice=async()=>{
+    const [upstream,ethUsd]=await Promise.all([fetch(DEX_PAIR_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),getEthUsd()]),data=await upstream.json();
+    if(!upstream.ok)throw new Error(`DexScreener ${upstream.status}`);
+    const pair=data?.pair||(data?.pairs||[]).find(item=>String(item?.pairAddress||"").toLowerCase()==="0xb37361ebebfe7e0f0d98300f0a8ae777daa1cc12");
+    if(!pair)throw new Error("Liquidity pool was not found");
+    const base=String(pair.baseToken?.address||"").toLowerCase(),quote=String(pair.quoteToken?.address||"").toLowerCase(),native=Number(pair.priceNative);
+    let lfEth=0;
+    if(base===LF_TOKEN_ADDRESS&&quote===WETH_TOKEN_ADDRESS)lfEth=native;
+    else if(base===WETH_TOKEN_ADDRESS&&quote===LF_TOKEN_ADDRESS&&native)lfEth=1/native;
+    if(!lfEth||!ethUsd)throw new Error("Pool does not contain LF/WETH pricing");
+    const price=lfEth*ethUsd;
+    return {price,lfEth,ethUsd,change24h:Number(pair.priceChange?.h24)||0,liquidity:Number(pair.liquidity?.usd)||0,volume24h:Number(pair.volume?.h24)||0,source:`LF/WETH pool × live ETH · ${pair.dexId||"DEX"}`,pairAddress:String(pair.pairAddress||""),updatedAt:Date.now()};
+  };
+  const fromPair=pair=>{if(!Number(pair?.priceUsd))return null;return {price:Number(pair.priceUsd),change24h:Number(pair.priceChange?.h24)||0,liquidity:Number(pair.liquidity?.usd)||0,volume24h:Number(pair.volume?.h24)||0,source:`DexScreener fallback · ${pair.dexId||"DEX"}`,updatedAt:Date.now()};};
   const dexScreener=async url=>{const upstream=await fetch(url,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json();if(!upstream.ok)throw new Error(`DexScreener ${upstream.status}`);const pairs=[data?.pair,...(data?.pairs||[])].filter(Boolean).sort((a,b)=>(Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0)),value=fromPair(pairs[0]);if(!value)throw new Error("DexScreener returned no LF price");return value;};
   const geckoTerminal=async()=>{const upstream=await fetch(GECKOTERMINAL_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.data?.attributes,price=Number(token?.price_usd);if(!upstream.ok||!price)throw new Error(`GeckoTerminal ${upstream.status}`);return {price,change24h:Number(token?.price_change_percentage?.h24)||0,liquidity:Number(token?.total_reserve_in_usd)||0,volume24h:Number(token?.volume_usd?.h24)||0,source:"GeckoTerminal",updatedAt:Date.now()};};
   const coinGecko=async()=>{const upstream=await fetch(COINGECKO_URL,{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),data=await upstream.json(),token=data?.[LF_TOKEN_ADDRESS];if(!upstream.ok||!Number(token?.usd))throw new Error(`CoinGecko ${upstream.status}`);return {price:Number(token.usd),change24h:Number(token.usd_24h_change)||0,liquidity:0,volume24h:Number(token.usd_24h_vol)||0,source:"CoinGecko",updatedAt:Number(token.last_updated_at)*1000||Date.now()};};
-  dexRequest=(async()=>{try{const value=await Promise.any([dexScreener(DEX_PAIR_URL),dexScreener(DEX_TOKEN_URL),geckoTerminal(),coinGecko()]);dexCache={value,updatedAt:Date.now()};return value;}catch(error){
+  dexRequest=(async()=>{try{let value;try{value=await poolPrice();}catch{value=await Promise.any([dexScreener(DEX_PAIR_URL),dexScreener(DEX_TOKEN_URL),geckoTerminal(),coinGecko()]);}dexCache={value,updatedAt:Date.now()};return value;}catch(error){
     if(dexCache.value)return {...dexCache.value,source:`${dexCache.value.source.replace(/ · cached$/,'')} · cached`};
     throw new Error("DEX price is unavailable from all providers");}
   })().finally(()=>{dexRequest=null;});
