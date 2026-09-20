@@ -51,6 +51,6 @@ The website and Telegram use one server-side setting. Changing buy, sell, or tot
 - Local buy/sell depth history chart with 5, 15, 30, and 60-minute views
 - Server-side Telegram low-depth alerts without exposing the bot token
 - Five selectable alarm tones with an in-settings preview button
-- DEX versus Gate average price and spread estimate after fees and entered gas
+- Live DEX buy/sell execution-average estimate using trade size and pool liquidity
 - WebSocket trade tape with rolling buy/sell value pressure
 - Live feed-latency and stale-data health indicator
