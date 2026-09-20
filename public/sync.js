@@ -20,6 +20,7 @@ document.addEventListener("DOMContentLoaded",()=>{
     if(buy<=0||sell<=0||total<=0||largeBuy<=0||largeBuyLevels<1||largeBuyLevels>18)return;
     soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);
     soundEnabled=$("soundEnabledInput").checked;if(soundEnabled){localStorage.setItem(keys.sound,"enabled");await getAudio().resume().catch(()=>{});}else{localStorage.removeItem(keys.sound);stopAlarm();}updateSoundButton();
+    popupsEnabled=$("popupEnabled").checked;if(popupsEnabled)localStorage.removeItem(keys.popups);else{localStorage.setItem(keys.popups,"disabled");$("alertStack").replaceChildren();}
     largeBuySettings={amount:largeBuy,levels:largeBuyLevels,loaded:true};activeLargeBuys=new Set();localStorage.setItem(keys.largeBuy,String(largeBuy));localStorage.setItem(keys.largeBuyLevels,String(largeBuyLevels));
     button.disabled=true;button.textContent="Saving…";
     try{
