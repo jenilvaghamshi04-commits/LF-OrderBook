@@ -4,6 +4,8 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const port = Number(process.env.PORT) || 3000;
+const host = process.env.HOST || "0.0.0.0";
+const settingsAdminToken = process.env.SETTINGS_ADMIN_TOKEN || "";
 const publicDir = path.join(__dirname, "public");
 const files = {
   "/": ["index.html", "text/html; charset=utf-8"],
@@ -88,10 +90,11 @@ async function loadTelegramState(){
     if(match){telegramBuyThreshold=Number(match[1])||telegramBuyThreshold;telegramSellThreshold=Number(match[2])||telegramSellThreshold;telegramTotalThreshold=Number(match[3])||telegramTotalThreshold;telegramMuted=match[4]==="1";return true;}
   }catch(error){console.error("Telegram state:",error.message);}return false;
 }
-function sharedSettings(){return {buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold,muted:telegramMuted};}
+function sharedSettings(){return {buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold,muted:telegramMuted,adminProtected:!!settingsAdminToken};}
 async function settingsApi(req,res){
   if(req.method==="GET")return json(res,200,sharedSettings());
   if(req.method!=="POST")return json(res,405,{message:"Method not allowed"});
+  if(settingsAdminToken){const supplied=String(req.headers.authorization||"").replace(/^Bearer\s+/i,"");const expected=Buffer.from(settingsAdminToken),actual=Buffer.from(supplied);if(!supplied||expected.length!==actual.length||!crypto.timingSafeEqual(expected,actual))return json(res,401,{message:"Admin code is required to change shared settings"});}
   try{const data=await readJson(req),buy=Number(data.buy),sell=Number(data.sell),total=Number(data.total);if([buy,sell,total].some(value=>!Number.isFinite(value)||value<=0||value>1000000000))return json(res,400,{message:"Enter valid buy, sell, and total amounts"});telegramBuyThreshold=buy;telegramSellThreshold=sell;telegramTotalThreshold=total;telegramCooldown.clear();await saveTelegramState();return json(res,200,{saved:true,...sharedSettings()});}catch(error){return json(res,502,{message:error.message||"Could not save shared settings"});}
 }
 async function getDepthSnapshot(){
@@ -265,7 +268,8 @@ async function registerTelegramCommands(){
 }
 async function configureTelegramWebhook(){
   if(!telegramToken)return false;
-  const host=process.env.RENDER_EXTERNAL_HOSTNAME||"lf-orderbook1.onrender.com",url=`https://${host}/api/telegram-webhook`;
+  const publicBase=(process.env.PUBLIC_BASE_URL|| (process.env.RENDER_EXTERNAL_HOSTNAME?`https://${process.env.RENDER_EXTERNAL_HOSTNAME}`:"https://lf-orderbook1.onrender.com")).replace(/\/$/,"");
+  const url=`${publicBase}/api/telegram-webhook`;
   try{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/setWebhook`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,secret_token:telegramWebhookSecret,allowed_updates:["message"],drop_pending_updates:false}),signal:AbortSignal.timeout(10000)}),result=await upstream.json();if(!upstream.ok||!result.ok)throw new Error(result.description||"Webhook setup failed");console.log("Telegram webhook active");return true;}catch(error){console.error("Telegram webhook:",error.message);return false;}
 }
 async function monitorDepth(){
@@ -319,4 +323,4 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(port, "0.0.0.0", async () => {console.log(`LF Orderbook running on port ${port}`);getRawOrderbook().catch(()=>{});getLastTrade().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
+server.listen(port, host, async () => {console.log(`LF Orderbook running on ${host}:${port}`);getRawOrderbook().catch(()=>{});getLastTrade().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
