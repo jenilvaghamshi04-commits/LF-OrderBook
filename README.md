@@ -1,10 +1,10 @@
-# LF Orderbook — Render version
+# LF Orderbook — Oracle and Render
 
 The monitor compares the Gate.io last-trade price with the live LF/WETH liquidity-pool price and supports full orderbook viewing through Telegram. The pool price is calculated as `LF price in WETH × live ETH/USD`, using pool `0xb37361EbEBfE7E0F0D98300f0a8aE777daa1cc12`. See `V15-DEX-TELEGRAM-ORDERBOOK.md` for the Telegram commands.
 
 The DEX ↔ Gate opportunity panel shows a separate Gate execution average. For a DEX buy it calculates the sell average across Gate bids for the estimated LF received; for a DEX sell it calculates the buy average across Gate asks for the LF sold. It shows insufficient depth rather than pricing a partial fill. DEX average is an estimate derived from the pool price and reported liquidity, not a firm swap quote.
 
-Lightweight LF/USDT depth monitor built for Render's free Web Service tier. It has no npm dependencies and no build step.
+Lightweight LF/USDT depth monitor with no npm dependencies or build step. For an Oracle Always Free VM, see [the Oracle deployment guide](deploy/oracle/README.md).
 
 ## Render settings
 
