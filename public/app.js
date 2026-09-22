@@ -9,7 +9,7 @@ let depthSamples=[], lowSince={buy:0,sell:0,total:0};
 let telegramEnabled=false, telegramConfigured=false, history=[], historyLowState={buy:false,sell:false,total:false}, deferredInstall;
 let orderbookLoading=false,dexLoading=false,exchangeVolumeLoading=false;
 let tradeLoading=false,latestTrade=null;
-let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates=[],streamReconnect=null,lastStreamRender=0,lastStreamMessage=0,streamRenderTimer=null,lastStreamAnalysis=0;
+let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates=[],streamReconnect=null,lastStreamRender=0,lastStreamMessage=0,streamOpenedAt=0,streamRenderTimer=null,lastStreamAnalysis=0;
 
 const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -74,7 +74,65 @@ function seedStreamBook(book){streamBook={...book,bids:(book.bids||[]).map(level
 function analyzeMarket(book,rawDepth){const alertDepth=stabilize(rawDepth);addHistory(alertDepth);const low={buy:alertDepth.buy<thresholds.buy,sell:alertDepth.sell<thresholds.sell,total:alertDepth.total<thresholds.total},now=Date.now(),detected=[];for(const side of ["buy","sell","total"]){if(low[side]&&!lowSince[side])lowSince[side]=now;if(!low[side])lowSince[side]=0;const confirmed=low[side]&&now-lowSince[side]>=CONFIRM_LOW_MS,due=!previousLow.ready||!previousLow[side]||now-lastAlert[side]>=REPEAT;if(confirmed&&due){detected.push(side);lastAlert[side]=now;}if(!low[side])lastAlert[side]=0;previousLow[side]=confirmed;}previousLow.ready=true;detected.forEach(side=>{showAlert(side,alertDepth[side],thresholds[side]);sendTelegram(side,alertDepth[side],thresholds[side]);});const largeBuys=findLargeBuys(book),currentLargeBuys=new Set(largeBuys.map(order=>order.key)),newLargeBuys=[];for(const order of largeBuys){const count=(largeBuySeen.get(order.key)||0)+1;largeBuySeen.set(order.key,count);if(count>=LOW_CONFIRMATIONS&&!activeLargeBuys.has(order.key)){activeLargeBuys.add(order.key);newLargeBuys.push(order);}}for(const key of [...largeBuySeen.keys()])if(!currentLargeBuys.has(key)){largeBuySeen.delete(key);activeLargeBuys.delete(key);}newLargeBuys.forEach(showLargeBuyAlert);if(detected.length||newLargeBuys.length)playAlert();}
 function paintMarket(market,runAnalysis=true){const book=market.book;latestTrade=market.lastTrade;$("lastTradePrice").textContent=price(latestTrade.price);$("centerTradePrice").textContent=price(latestTrade.price);$("lastTradeMeta").textContent=`${latestTrade.side?latestTrade.side.toUpperCase()+" · ":""}${new Date(latestTrade.timestamp).toLocaleTimeString()}`;const rawDepth=calculate(book,latestTrade.price);if(!rawDepth.mid)throw new Error("Invalid last trade reference");latest={buy:rawDepth.buy,sell:rawDepth.sell,total:rawDepth.total,mid:rawDepth.mid,ready:true};if(runAnalysis)analyzeMarket(book,rawDepth);render(book,rawDepth);renderDex();if(typeof updateIntelligence==="function")updateIntelligence(book,rawDepth);$("connection").textContent=`Live · Gate.io ${market.feed==="WebSocket"?"WebSocket":market.feed==="direct"?"direct":"fallback"} · fastest 100ms feed`;$("liveDot").classList.remove("offline");}
 function queueStreamRender(){if(streamRenderTimer!==null)return;const run=()=>{streamRenderTimer=null;lastStreamRender=performance.now();if(!streamReady||!streamBook||!latestTrade)return;try{const now=Date.now(),runAnalysis=now-lastStreamAnalysis>=250;if(runAnalysis)lastStreamAnalysis=now;paintMarket({book:streamBook,lastTrade:latestTrade,feed:"WebSocket"},runAnalysis);}catch(error){$("updated").textContent=error.message;}};streamRenderTimer=document.hidden?setTimeout(run,100):requestAnimationFrame(run);}
-function connectMarketStream(){clearTimeout(streamReconnect);try{streamSocket?.close();const ws=new WebSocket("wss://api.gateio.ws/ws/v4/");streamSocket=ws;ws.onopen=()=>{lastStreamMessage=Date.now();const time=Math.floor(Date.now()/1000);ws.send(JSON.stringify({time,channel:"spot.order_book_update",event:"subscribe",payload:["LF_USDT","100ms"]}));ws.send(JSON.stringify({time,channel:"spot.trades",event:"subscribe",payload:["LF_USDT"]}));};ws.onmessage=event=>{lastStreamMessage=Date.now();try{const message=JSON.parse(event.data);if(message.event!=="update"||!message.result)return;if(message.channel==="spot.trades"){const trade=message.result;if(!num(trade.price))return;latestTrade={price:num(trade.price),amount:num(trade.amount),side:trade.side||"",tradeId:String(trade.id||""),timestamp:num(trade.create_time_ms)||num(trade.create_time)*1000||Date.now(),source:"Gate.io WebSocket"};if(typeof recordFeedLatency==="function")recordFeedLatency(latestTrade.timestamp);if(typeof addTapeTrade==="function")addTapeTrade(latestTrade);queueStreamRender();return;}if(message.channel==="spot.order_book_update"){const update=message.result;if(typeof recordFeedLatency==="function")recordFeedLatency(update.t);if(!streamReady){streamUpdates.push(update);streamUpdates=streamUpdates.slice(-500);return;}if(!applyStreamUpdate(update)){streamReady=false;streamUpdates=[update];load();return;}queueStreamRender();}}catch{}};ws.onerror=()=>ws.close();ws.onclose=()=>{streamReady=false;streamReconnect=setTimeout(connectMarketStream,1000);};}catch{streamReconnect=setTimeout(connectMarketStream,1000);}}
+function connectMarketStream(){
+  clearTimeout(streamReconnect);
+  const previous=streamSocket;
+  streamSocket=null;
+  if(previous)previous.close();
+  try{
+    const ws=new WebSocket("wss://api.gateio.ws/ws/v4/");
+    streamSocket=ws;
+    streamOpenedAt=Date.now();
+    ws.onopen=()=>{
+      if(streamSocket!==ws)return;
+      lastStreamMessage=Date.now();
+      const time=Math.floor(Date.now()/1000);
+      ws.send(JSON.stringify({time,channel:"spot.order_book_update",event:"subscribe",payload:["LF_USDT","100ms"]}));
+      ws.send(JSON.stringify({time,channel:"spot.trades",event:"subscribe",payload:["LF_USDT"]}));
+      if(!streamReady)load();
+    };
+    ws.onmessage=event=>{
+      if(streamSocket!==ws)return;
+      lastStreamMessage=Date.now();
+      try{
+        const message=JSON.parse(event.data);
+        if(message.event!=="update"||!message.result)return;
+        if(message.channel==="spot.trades"){
+          const trade=message.result;
+          if(!num(trade.price))return;
+          latestTrade={price:num(trade.price),amount:num(trade.amount),side:trade.side||"",tradeId:String(trade.id||""),timestamp:num(trade.create_time_ms)||num(trade.create_time)*1000||Date.now(),source:"Gate.io WebSocket"};
+          if(typeof recordFeedLatency==="function")recordFeedLatency(latestTrade.timestamp);
+          if(typeof addTapeTrade==="function")addTapeTrade(latestTrade);
+          queueStreamRender();
+          return;
+        }
+        if(message.channel==="spot.order_book_update"){
+          const update=message.result;
+          if(typeof recordFeedLatency==="function")recordFeedLatency(update.t);
+          if(!streamReady){streamUpdates.push(update);streamUpdates=streamUpdates.slice(-500);return;}
+          if(!applyStreamUpdate(update)){streamReady=false;streamUpdates=[update];load();return;}
+          queueStreamRender();
+        }
+      }catch(error){console.warn("Gate stream update:",error);}
+    };
+    ws.onerror=()=>ws.close();
+    ws.onclose=()=>{
+      if(streamSocket!==ws)return;
+      streamReady=false;
+      streamBook=null;
+      streamUpdates=[];
+      streamSocket=null;
+      $("connection").textContent="Reconnecting to Gate.io…";
+      $("liveDot").classList.add("offline");
+      streamReconnect=setTimeout(connectMarketStream,1000);
+      if(!document.hidden)load();
+    };
+  }catch{
+    streamSocket=null;
+    streamReady=false;
+    streamReconnect=setTimeout(connectMarketStream,1000);
+  }
+}
 
 async function load(){
   if(orderbookLoading)return;
@@ -86,7 +144,7 @@ async function load(){
   }catch(e){$("connection").textContent="Connection issue";$("liveDot").classList.add("offline");$("updated").textContent=e.message;}finally{orderbookLoading=false;}
 }
 
-async function init(){const legacy=num(localStorage.getItem(keys.legacy)),fallback=legacy>0?legacy:DEFAULT;thresholds.buy=num(localStorage.getItem(keys.buy))||fallback;thresholds.sell=num(localStorage.getItem(keys.sell))||fallback;thresholds.total=num(localStorage.getItem(keys.total))||TOTAL_DEFAULT;soundEnabled=localStorage.getItem(keys.sound)==="enabled";popupsEnabled=localStorage.getItem(keys.popups)!=="disabled";telegramEnabled=localStorage.getItem(keys.telegram)==="enabled";try{history=JSON.parse(localStorage.getItem(keys.history)||"[]").filter(x=>x&&x.t&&x.b>=0&&x.s>=0);}catch{history=[];}applyTheme(localStorage.getItem(keys.theme)||"dark");$("themeBtn").onclick=()=>applyTheme(document.documentElement.dataset.theme==="light"?"dark":"light");updateSoundButton();$("soundBtn").onclick=async()=>{soundEnabled=!soundEnabled;if(soundEnabled){localStorage.setItem(keys.sound,"enabled");await getAudio().resume();if(latest.ready&&(latest.buy<thresholds.buy||latest.sell<thresholds.sell||latest.total<thresholds.total))playAlert();else ring();}else{localStorage.removeItem(keys.sound);stopAlarm();}updateSoundButton();};$("testBtn").onclick=()=>ring();$("refreshBtn").onclick=load;$("chartRange").onchange=drawChart;window.addEventListener("resize",drawChart);$("settingsBtn").onclick=()=>{fillSettings();$("settingsDialog").showModal();};$("saveSettings").onclick=(e)=>{const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value);if(buy<=0||sell<=0||total<=0){e.preventDefault();return;}thresholds={buy,sell,total};telegramEnabled=$("telegramEnabled").checked&&telegramConfigured;localStorage.setItem(keys.buy,String(buy));localStorage.setItem(keys.sell,String(sell));localStorage.setItem(keys.total,String(total));telegramEnabled?localStorage.setItem(keys.telegram,"enabled"):localStorage.removeItem(keys.telegram);localStorage.removeItem(keys.legacy);previousLow={buy:false,sell:false,total:false,ready:false};lastAlert={buy:0,sell:0,total:0};stopAlarm();if(latest.ready){$("buyDepth").textContent=`${money(latest.buy)} / ${money(buy)} USDT`;$("sellDepth").textContent=`${money(latest.sell)} / ${money(sell)} USDT`;$("totalDepth").textContent=`${money(latest.total)} USDT`;}load();};$("telegramTest").onclick=async()=>{const b=$("telegramTest");b.disabled=true;b.textContent="Sending…";try{const r=await fetch("/api/telegram",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({side:"test"})}),j=await r.json();if(!r.ok)throw new Error(j.message);b.textContent="Sent ✓";}catch(e){b.textContent="Failed";$("telegramStatus").textContent=e.message;}setTimeout(()=>{b.textContent="Send test";b.disabled=!telegramConfigured;},2000);};try{const r=await fetch("/api/telegram"),j=await r.json();telegramConfigured=!!j.configured;}catch{}$("telegramStatus").textContent=telegramConfigured?"Configured on Render":"Add bot token and chat ID in Render";$("telegramEnabled").disabled=!telegramConfigured;$("telegramEnabled").checked=telegramEnabled&&telegramConfigured;$("telegramTest").disabled=!telegramConfigured;fillSettings();if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js");window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;$("installBtn").classList.remove("hidden");});$("installBtn").onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$("installBtn").classList.add("hidden");};drawChart();load();setInterval(()=>{if(!streamReady)load();},1000);}
+async function init(){const legacy=num(localStorage.getItem(keys.legacy)),fallback=legacy>0?legacy:DEFAULT;thresholds.buy=num(localStorage.getItem(keys.buy))||fallback;thresholds.sell=num(localStorage.getItem(keys.sell))||fallback;thresholds.total=num(localStorage.getItem(keys.total))||TOTAL_DEFAULT;soundEnabled=localStorage.getItem(keys.sound)==="enabled";popupsEnabled=localStorage.getItem(keys.popups)!=="disabled";telegramEnabled=localStorage.getItem(keys.telegram)==="enabled";try{history=JSON.parse(localStorage.getItem(keys.history)||"[]").filter(x=>x&&x.t&&x.b>=0&&x.s>=0);}catch{history=[];}applyTheme(localStorage.getItem(keys.theme)||"dark");$("themeBtn").onclick=()=>applyTheme(document.documentElement.dataset.theme==="light"?"dark":"light");updateSoundButton();$("soundBtn").onclick=async()=>{soundEnabled=!soundEnabled;if(soundEnabled){localStorage.setItem(keys.sound,"enabled");await getAudio().resume();if(latest.ready&&(latest.buy<thresholds.buy||latest.sell<thresholds.sell||latest.total<thresholds.total))playAlert();else ring();}else{localStorage.removeItem(keys.sound);stopAlarm();}updateSoundButton();};$("testBtn").onclick=()=>ring();$("refreshBtn").onclick=load;$("chartRange").onchange=drawChart;window.addEventListener("resize",drawChart);$("settingsBtn").onclick=()=>{fillSettings();$("settingsDialog").showModal();};$("saveSettings").onclick=(e)=>{const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value);if(buy<=0||sell<=0||total<=0){e.preventDefault();return;}thresholds={buy,sell,total};telegramEnabled=$("telegramEnabled").checked&&telegramConfigured;localStorage.setItem(keys.buy,String(buy));localStorage.setItem(keys.sell,String(sell));localStorage.setItem(keys.total,String(total));telegramEnabled?localStorage.setItem(keys.telegram,"enabled"):localStorage.removeItem(keys.telegram);localStorage.removeItem(keys.legacy);previousLow={buy:false,sell:false,total:false,ready:false};lastAlert={buy:0,sell:0,total:0};stopAlarm();if(latest.ready){$("buyDepth").textContent=`${money(latest.buy)} / ${money(buy)} USDT`;$("sellDepth").textContent=`${money(latest.sell)} / ${money(sell)} USDT`;$("totalDepth").textContent=`${money(latest.total)} USDT`;}load();};$("telegramTest").onclick=async()=>{const b=$("telegramTest");b.disabled=true;b.textContent="Sending…";try{const r=await fetch("/api/telegram",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({side:"test"})}),j=await r.json();if(!r.ok)throw new Error(j.message);b.textContent="Sent ✓";}catch(e){b.textContent="Failed";$("telegramStatus").textContent=e.message;}setTimeout(()=>{b.textContent="Send test";b.disabled=!telegramConfigured;},2000);};try{const r=await fetch("/api/telegram"),j=await r.json();telegramConfigured=!!j.configured;}catch{}$("telegramStatus").textContent=telegramConfigured?"Configured on server":"Add bot token and chat ID on the server";$("telegramEnabled").disabled=!telegramConfigured;$("telegramEnabled").checked=telegramEnabled&&telegramConfigured;$("telegramTest").disabled=!telegramConfigured;fillSettings();if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js");window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;$("installBtn").classList.remove("hidden");});$("installBtn").onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$("installBtn").classList.add("hidden");};drawChart();load();setInterval(()=>{if(!streamReady)load();},1000);}
 function fillSettings(){if(!largeBuySettings.loaded){largeBuySettings.amount=num(localStorage.getItem(keys.largeBuy))||LARGE_BUY_DEFAULT;largeBuySettings.levels=Math.max(1,Math.min(18,Math.round(num(localStorage.getItem(keys.largeBuyLevels))||LARGE_BUY_LEVELS_DEFAULT)));largeBuySettings.loaded=true;}$("buyInput").value=thresholds.buy;$("sellInput").value=thresholds.sell;$("totalInput").value=thresholds.total;$("largeBuyInput").value=largeBuySettings.amount;$("largeBuyLevelsInput").value=largeBuySettings.levels;$("popupEnabled").checked=popupsEnabled;$("buyCurrent").textContent=`Current buy setting: ${money(thresholds.buy)} USDT`;$("sellCurrent").textContent=`Current sell setting: ${money(thresholds.sell)} USDT`;$("totalCurrent").textContent=`Current total setting: ${money(thresholds.total)} USDT`;$("largeBuyCurrent").textContent=`Alert at ${money(largeBuySettings.amount)} USDT or more`;$("largeBuyLevelsCurrent").textContent=`Watching top ${largeBuySettings.levels} highest-price buy orders`;}
 function updateSoundButton(){$("soundBtn").innerHTML=soundEnabled?"🔊 <b>Sound on</b>":"🔇 <b>Sound off</b>";$("soundBtn").classList.toggle("enabled",soundEnabled);$("testBtn").disabled=!soundEnabled;if($("soundEnabledInput"))$("soundEnabledInput").checked=soundEnabled;}
 function applyTheme(theme){document.documentElement.dataset.theme=theme;localStorage.setItem(keys.theme,theme);const light=theme==="light";$("themeBtn").innerHTML=light?"🌙 <b>Dark</b>":"☀️ <b>Light</b>";$("themeBtn").title=light?"Switch to dark theme":"Switch to light theme";$("themeBtn").setAttribute("aria-label",$("themeBtn").title);document.querySelector('meta[name="theme-color"]').content=light?"#f4f7f5":"#060806";drawChart();}
@@ -95,4 +153,25 @@ document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();setInterval(loa
 document.addEventListener("DOMContentLoaded",()=>{loadExchangeVolume();setInterval(loadExchangeVolume,15000);});
 document.addEventListener("DOMContentLoaded",()=>{$("clearHistory").onclick=()=>{history=[];historyLowState={buy:latest.ready&&latest.buy<thresholds.buy,sell:latest.ready&&latest.sell<thresholds.sell,total:latest.ready&&latest.total<thresholds.total};localStorage.removeItem(keys.history);drawChart();};});
 document.addEventListener("DOMContentLoaded",()=>{$("saveSettings").addEventListener("click",()=>{historyLowState={buy:false,sell:false,total:false};});});
-document.addEventListener("DOMContentLoaded",()=>{connectMarketStream();setInterval(()=>{if(streamSocket?.readyState===WebSocket.OPEN)streamSocket.send(JSON.stringify({time:Math.floor(Date.now()/1000),channel:"spot.ping"}));if(!document.hidden&&streamSocket?.readyState===WebSocket.OPEN&&lastStreamMessage&&Date.now()-lastStreamMessage>25000)streamSocket.close();},10000);document.addEventListener("pointerdown",()=>{if(soundEnabled)getAudio().resume().catch(()=>{});},{passive:true});});
+document.addEventListener("DOMContentLoaded",()=>{
+  connectMarketStream();
+  setInterval(()=>{
+    const ws=streamSocket;
+    if(!ws)return;
+    const now=Date.now();
+    if(ws.readyState===WebSocket.OPEN){
+      if(now-lastStreamMessage>20000){ws.close();return;}
+      try{ws.send(JSON.stringify({time:Math.floor(now/1000),channel:"spot.ping"}));}catch{ws.close();}
+    }else if(ws.readyState===WebSocket.CONNECTING&&now-streamOpenedAt>12000)ws.close();
+  },5000);
+  document.addEventListener("visibilitychange",()=>{
+    if(document.hidden)return;
+    if(!streamSocket||Date.now()-lastStreamMessage>10000){
+      streamReady=false;
+      streamBook=null;
+      connectMarketStream();
+      load();
+    }
+  });
+  document.addEventListener("pointerdown",()=>{if(soundEnabled)getAudio().resume().catch(()=>{});},{passive:true});
+});
