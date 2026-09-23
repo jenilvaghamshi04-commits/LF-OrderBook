@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=41">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -21,6 +21,7 @@
 
   <section class="market-strip"><div class="dex-card"><span>Live pool price</span><strong id="dexPrice">—</strong><small id="dexSource">Loading LF/WETH pool + ETH…</small></div><div><span>Last trade price</span><strong id="lastTradePrice">—</strong><small id="lastTradeMeta">Loading latest trade…</small></div><div><span>Best bid</span><strong id="bestBid" class="buy-text">—</strong></div><div><span>Best ask</span><strong id="bestAsk" class="sell-text">—</strong></div><div><span>Spread</span><strong id="spread">—</strong></div><div class="volume-card"><span>Exchange volume (24h)</span><strong id="exchangeVolume">—</strong><small id="exchangeVolumeQty">Loading Gate.io volume…</small></div></section>
 
+  <div class="market-workspace">
   <section class="orderbook">
     <div class="panel-title"><div><span class="activity">⌁</span><h1>Order book</h1></div><span id="updated">Connecting…</span></div>
     <div id="pressureMeter" class="pressure-meter" role="meter" aria-label="Buy and sell pressure within 2 percent" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><strong class="pressure-buy">B <span id="buyPressure">50.00%</span></strong><div class="pressure-track"><i id="buyPressureBar" class="pressure-buy-bar" style="width:50%"></i><i id="sellPressureBar" class="pressure-sell-bar" style="width:50%"></i></div><strong class="pressure-sell"><span id="sellPressure">50.00%</span> S</strong></div>
@@ -30,9 +31,10 @@
     <div class="spread-line"><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span></div><small id="centerSpread">Spread —</small></div>
     <div id="bids" class="book-rows"></div>
   </section>
+  <article class="intel-panel tape-panel market-trades-panel"><div class="intel-head"><div><span>Completed transactions</span><h2>Market trades</h2></div><b id="tapePressure">B 50% · S 50%</b></div><div class="tape-columns"><span>Time</span><span>Side</span><span>Price</span><span>Value</span></div><div id="tradeTape" class="trade-tape"><div class="tape-empty">Loading recent trades…</div></div></article>
+  </div>
   <section class="intelligence-grid" aria-label="Trading intelligence">
     <article class="intel-panel arbitrage-panel"><div class="intel-head"><div><span>Cross-market comparison</span><h2>DEX ↔ Gate opportunity</h2></div><b id="arbDirection">Waiting</b></div><div class="arb-controls"><select id="arbSide" aria-label="DEX trade side"><option value="buy">Buy LF on DEX</option><option value="sell">Sell LF on DEX</option></select><label><span id="arbSizeLabel">Spend amount</span><div><input id="arbSize" type="number" min="0.000001" step="any" value="1000" inputmode="decimal"><b id="arbSizeUnit">USDT</b></div></label><label><span>Gas estimate</span><div><input id="arbGas" type="number" min="0" step="0.1" value="5" inputmode="decimal"><b>USDT</b></div></label></div><div class="arb-result"><span><small>Estimated DEX average</small><strong id="arbAverage">—</strong></span><span><small id="arbGateLabel">Gate selling average</small><strong id="arbGateAverage">—</strong></span><span><small>Gross spread</small><strong id="arbGross">—</strong></span><span><small>Estimated net</small><strong id="arbNet">—</strong></span></div><p id="arbMessage">Waiting for live DEX pool data.</p><small id="arbMethod">Gate average uses order-book levels across the full quantity. DEX average estimates pool execution with fees and price impact.</small></article>
-    <article class="intel-panel tape-panel"><div class="intel-head"><div><span>Completed transactions</span><h2>Live trade tape</h2></div><b id="tapePressure">B 50% · S 50%</b></div><div class="tape-columns"><span>Time</span><span>Side</span><span>Price</span><span>Value</span></div><div id="tradeTape" class="trade-tape"><div class="tape-empty">Waiting for live trades…</div></div></article>
   </section>
   <section class="chart-panel shortage-history" id="depthHistory"><div class="chart-head"><div><h2>Depth shortage history</h2><span>Only records when buy, sell, or total depth falls below its setting</span></div><div class="history-controls"><select id="chartRange"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60" selected>60 minutes</option></select><button id="clearHistory" type="button">Clear history</button></div></div><div class="depth-history-grid"><article class="side-history-box buy-history-box"><header><div><h3><i class="dot buy-dot"></i>Buy-side shortage chart</h3><small id="buyHistoryTarget">Below buy setting</small></div><b>BUY</b></header><div class="chart-wrap side-chart-wrap"><canvas id="buyDepthChart"></canvas><span id="buyChartEmpty">No buy-depth shortage in this time range.</span></div></article><article class="side-history-box sell-history-box"><header><div><h3><i class="dot sell-dot"></i>Sell-side shortage chart</h3><small id="sellHistoryTarget">Below sell setting</small></div><b>SELL</b></header><div class="chart-wrap side-chart-wrap"><canvas id="sellDepthChart"></canvas><span id="sellChartEmpty">No sell-depth shortage in this time range.</span></div></article></div><section class="timed-history-panel"><div class="timed-history-head"><div><h3>Timed depth records</h3><small>Shows exactly which target was low: buy, sell, or total</small></div><b>EVENTS ONLY</b></div><div id="timedHistoryList" class="timed-history-list"></div></section></section>
   <footer><span>Public market data from Gate.io</span><span id="targets">Targets: Buy 500.00 · Sell 300.00 · Total 1,000.00 USDT · repeats every 1 min while low</span></footer>
@@ -62,8 +64,8 @@
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=40" defer></script>
-<script src="intelligence.js?v=40" defer></script>
-<script src="sync.js?v=40" defer></script>
+<script src="app.js?v=41" defer></script>
+<script src="intelligence.js?v=41" defer></script>
+<script src="sync.js?v=41" defer></script>
 </body>
 </html>
