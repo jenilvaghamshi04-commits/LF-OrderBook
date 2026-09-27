@@ -301,6 +301,7 @@ async function dexPriceApi(res){try{return json(res,200,await getDexPrice());}ca
 async function lastTradeApi(res){try{return json(res,200,await getLastTrade());}catch(error){return json(res,502,{message:error.message||"Last trade unavailable"});}}
 async function exchangeVolumeApi(res){try{return json(res,200,await getExchangeVolume());}catch(error){return json(res,502,{message:error.message||"Exchange volume unavailable"});}}
 async function marketApi(res){try{const [book,lastTrade]=await Promise.all([getRawOrderbook(),getLastTrade()]);return json(res,200,{book,lastTrade,serverTime:Date.now()});}catch(error){return json(res,502,{message:error.message||"Market data unavailable"});}}
+function healthApi(req,res){if(!["GET","HEAD"].includes(req.method))return json(res,405,{message:"Method not allowed"});res.writeHead(200,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});if(req.method==="HEAD")return res.end();res.end(JSON.stringify({ok:true,service:"LF OrderBook",serverTime:Date.now(),uptimeSeconds:Math.round(process.uptime())}));}
 
 const requestHandler = async (req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
@@ -309,6 +310,7 @@ const requestHandler = async (req, res) => {
   if (pathname === "/api/last-trade") return lastTradeApi(res);
   if (pathname === "/api/exchange-volume") return exchangeVolumeApi(res);
   if (pathname === "/api/market") return marketApi(res);
+  if (pathname === "/api/health") return healthApi(req, res);
   if (pathname === "/api/telegram") return telegram(req, res);
   if (pathname === "/api/settings") return settingsApi(req, res);
   if (pathname === "/api/telegram-webhook") return telegramWebhook(req, res);
