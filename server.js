@@ -21,6 +21,8 @@ const files = {
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN || "";
 const telegramChatId = process.env.TELEGRAM_CHAT_ID || "";
+const telegramChatId2 = process.env.TELEGRAM_CHAT_ID_2 || "";
+const telegramChatIds = [...new Set([telegramChatId, telegramChatId2].map(value=>String(value).trim()).filter(Boolean))];
 let telegramBuyThreshold = Number(process.env.TELEGRAM_BUY_THRESHOLD) || 500;
 let telegramSellThreshold = Number(process.env.TELEGRAM_SELL_THRESHOLD) || 300;
 let telegramTotalThreshold = Number(process.env.TELEGRAM_TOTAL_THRESHOLD) || 1000;
@@ -55,27 +57,27 @@ const telegramWebhookSecret = telegramToken ? crypto.createHash("sha256").update
 function json(res,status,body){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(body));}
 function readJson(req){return new Promise((resolve,reject)=>{let body="";req.on("data",chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on("end",()=>{try{resolve(JSON.parse(body||"{}"));}catch(error){reject(error);}});req.on("error",reject);});}
 async function telegram(req,res){
-  if(!telegramToken||!telegramChatId)return json(res,503,{configured:false,message:"Telegram is not configured on Render"});
+  if(!telegramToken||!telegramChatIds.length)return json(res,503,{configured:false,message:"Telegram is not configured"});
   if(req.method==="GET")return json(res,200,{configured:true});
   if(req.method!=="POST")return json(res,405,{message:"Method not allowed"});
   try{const data=await readJson(req),side=["buy","sell","total"].includes(data.side)?data.side:"test",value=Number(data.value),threshold=Number(data.threshold);
     if(side!=="test"&&telegramMuted)return json(res,200,{sent:false,muted:true});
     if(side!=="test"&&Date.now()-(telegramCooldown.get(side)||0)<55000)return json(res,200,{sent:false,cooldown:true});
     const message=side==="test"?"✅ LF Orderbook Telegram alerts are working.":`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${value.toFixed(2)} USDT\nMinimum: ${threshold.toFixed(2)} USDT\nRange: 2% from mid-price`;
-    const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:telegramChatId,text:message}),signal:AbortSignal.timeout(10000)}),result=await upstream.json();
-    if(!upstream.ok||!result.ok)throw new Error(result.description||"Telegram request failed");if(side!=="test")telegramCooldown.set(side,Date.now());return json(res,200,{sent:true});
+    const results=await Promise.all(telegramChatIds.map(async chatId=>{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:chatId,text:message}),signal:AbortSignal.timeout(10000)}),result=await upstream.json();if(!upstream.ok||!result.ok)throw new Error(result.description||"Telegram request failed");return chatId;}));
+    if(side!=="test")telegramCooldown.set(side,Date.now());return json(res,200,{sent:true,recipients:results.length});
   }catch(error){return json(res,502,{message:error.message||"Could not send Telegram alert"});}
 }
 
 async function sendTelegramMessage(message,side){
-  if(!telegramToken||!telegramChatId||telegramMuted)return;
+  if(!telegramToken||!telegramChatIds.length||telegramMuted)return;
   if(Date.now()-(telegramCooldown.get(side)||0)<55000)return;
-  const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:telegramChatId,text:message}),signal:AbortSignal.timeout(10000)});
-  if(upstream.ok)telegramCooldown.set(side,Date.now());
+  const results=await Promise.all(telegramChatIds.map(chatId=>fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:chatId,text:message}),signal:AbortSignal.timeout(10000)})));
+  if(results.some(upstream=>upstream.ok))telegramCooldown.set(side,Date.now());
 }
-async function replyTelegram(message){
-  if(!telegramToken||!telegramChatId)return;
-  const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:telegramChatId,text:message}),signal:AbortSignal.timeout(10000)});
+async function replyTelegram(message,chatId=telegramChatId){
+  if(!telegramToken||!chatId)return;
+  const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:chatId,text:message}),signal:AbortSignal.timeout(10000)});
   if(!upstream.ok){const result=await upstream.json().catch(()=>({}));throw new Error(result.description||"Telegram reply failed");}
 }
 async function saveTelegramState(){
@@ -242,8 +244,9 @@ async function handleTelegramCommand(text){
 }
 async function handleTelegramUpdate(update){
   const message=update?.message,text=message?.text||"";
-  if(String(message?.chat?.id)!==String(telegramChatId)||!text.startsWith("/"))return;
-  try{const reply=await handleTelegramCommand(text);for(const part of (Array.isArray(reply)?reply:[reply]))if(part)await replyTelegram(part);}catch(error){await replyTelegram(`⚠️ ${error.message||"Command failed"}`).catch(()=>{});}
+  const chatId=String(message?.chat?.id||"");
+  if(!telegramChatIds.includes(chatId)||!text.startsWith("/"))return;
+  try{const reply=await handleTelegramCommand(text);for(const part of (Array.isArray(reply)?reply:[reply]))if(part)await replyTelegram(part,chatId);}catch(error){await replyTelegram(`⚠️ ${error.message||"Command failed"}`,chatId).catch(()=>{});}
 }
 async function telegramWebhook(req,res){
   if(req.method!=="POST")return json(res,405,{message:"Method not allowed"});
