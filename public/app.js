@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 2, CONFIRM_LOW_MS = 5000, MEDIAN_SAMPLES = 5;
-const keys = { buy: "lf-orderbook-buy-depth-threshold", sell: "lf-orderbook-sell-depth-threshold", total: "lf-orderbook-total-depth-threshold", largeBuy: "lf-orderbook-large-buy-threshold", largeBuyLevels: "lf-orderbook-large-buy-levels", legacy: "lf-orderbook-depth-threshold", sound: "lf-orderbook-sound", tone: "lf-orderbook-sound-tone", popups: "lf-orderbook-popups", telegram: "lf-orderbook-telegram", history: "lf-orderbook-depth-history", theme: "lf-orderbook-theme" };
+const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 2, CONFIRM_LOW_MS = 5000, MEDIAN_SAMPLES = 5, REFRESH_DEFAULT = 1000, REFRESH_MIN = 100, REFRESH_MAX = 10000;
+const keys = { buy: "lf-orderbook-buy-depth-threshold", sell: "lf-orderbook-sell-depth-threshold", total: "lf-orderbook-total-depth-threshold", largeBuy: "lf-orderbook-large-buy-threshold", largeBuyLevels: "lf-orderbook-large-buy-levels", refresh: "lf-orderbook-refresh-ms", legacy: "lf-orderbook-depth-threshold", sound: "lf-orderbook-sound", tone: "lf-orderbook-sound-tone", popups: "lf-orderbook-popups", telegram: "lf-orderbook-telegram", history: "lf-orderbook-depth-history", theme: "lf-orderbook-theme" };
 let thresholds = { buy: DEFAULT, sell: DEFAULT, total: TOTAL_DEFAULT }, soundEnabled = false, soundTone = "chime", audio, alarmTimer, alarmStopTimer;
 let popupsEnabled=true;
 let largeBuySettings={amount:LARGE_BUY_DEFAULT,levels:LARGE_BUY_LEVELS_DEFAULT}, activeLargeBuys=new Set(), largeBuySeen=new Map();
@@ -10,6 +10,7 @@ let telegramEnabled=false, telegramConfigured=false, history=[], historyLowState
 let orderbookLoading=false,dexLoading=false,exchangeVolumeLoading=false;
 let tradeLoading=false,latestTrade=null;
 let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates=[],streamReconnect=null,lastStreamRender=0,lastStreamMessage=0,streamOpenedAt=0,streamRenderTimer=null,lastStreamAnalysis=0;
+let refreshMs=REFRESH_DEFAULT,fallbackRefreshTimer=null;
 
 const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -134,12 +135,16 @@ function connectMarketStream(){
   }
 }
 
-async function load(){
+const normalizedRefreshMs=value=>Math.max(REFRESH_MIN,Math.min(REFRESH_MAX,Math.round(num(value)||REFRESH_DEFAULT)));
+function scheduleFallbackRefresh(){clearInterval(fallbackRefreshTimer);fallbackRefreshTimer=setInterval(()=>{if(!streamReady)load();},refreshMs);}
+function setRefreshInterval(value){refreshMs=normalizedRefreshMs(value);localStorage.setItem(keys.refresh,String(refreshMs));scheduleFallbackRefresh();}
+
+async function load(force=false){
   if(orderbookLoading)return;
   orderbookLoading=true;
   try{
-    const market=streamReady&&streamBook&&latestTrade?{book:streamBook,lastTrade:latestTrade,feed:"WebSocket"}:await fetchFastMarket();
-    if(streamSocket?.readyState===WebSocket.OPEN&&!streamReady){seedStreamBook(market.book);if(streamReady)market.book=streamBook;}
+    const market=!force&&streamReady&&streamBook&&latestTrade?{book:streamBook,lastTrade:latestTrade,feed:"WebSocket"}:await fetchFastMarket();
+    if(streamSocket?.readyState===WebSocket.OPEN&&(force||!streamReady)){streamReady=false;streamBook=null;streamUpdates=[];seedStreamBook(market.book);if(streamReady)market.book=streamBook;}
     paintMarket(market,true);
   }catch(e){$("connection").textContent="Connection issue";$("liveDot").classList.add("offline");$("updated").textContent=e.message;}finally{orderbookLoading=false;}
 }
@@ -151,6 +156,20 @@ function applyTheme(theme){document.documentElement.dataset.theme=theme;localSto
 document.addEventListener("DOMContentLoaded",init);
 document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();setInterval(loadDexPrice,10000);});
 document.addEventListener("DOMContentLoaded",()=>{loadExchangeVolume();setInterval(loadExchangeVolume,15000);});
+const baseFillSettings=fillSettings;
+fillSettings=function(){baseFillSettings();if($("refreshMsInput")){$("refreshMsInput").value=refreshMs;$("refreshMsCurrent").textContent=`Current backup refresh: ${refreshMs} ms`;}};
+document.addEventListener("DOMContentLoaded",()=>{
+  refreshMs=normalizedRefreshMs(localStorage.getItem(keys.refresh));
+  scheduleFallbackRefresh();
+  fillSettings();
+  $("refreshBtn").setAttribute("aria-label","Refresh live market data");
+  $("refreshBtn").onclick=async()=>{
+    const button=$("refreshBtn");
+    button.disabled=true;button.classList.add("refreshing");button.setAttribute("aria-label","Refreshing live market data");
+    try{await Promise.allSettled([load(true),loadDexPrice(),loadExchangeVolume()]);}
+    finally{button.disabled=false;button.classList.remove("refreshing");button.setAttribute("aria-label","Refresh live market data");}
+  };
+});
 document.addEventListener("DOMContentLoaded",()=>{$("clearHistory").onclick=()=>{history=[];historyLowState={buy:latest.ready&&latest.buy<thresholds.buy,sell:latest.ready&&latest.sell<thresholds.sell,total:latest.ready&&latest.total<thresholds.total};localStorage.removeItem(keys.history);drawChart();};});
 document.addEventListener("DOMContentLoaded",()=>{$("saveSettings").addEventListener("click",()=>{historyLowState={buy:false,sell:false,total:false};});});
 document.addEventListener("DOMContentLoaded",()=>{
