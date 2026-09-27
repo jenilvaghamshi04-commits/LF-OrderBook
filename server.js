@@ -268,7 +268,8 @@ async function registerTelegramCommands(){
 }
 async function configureTelegramWebhook(){
   if(!telegramToken)return false;
-  const publicBase=(process.env.PUBLIC_BASE_URL|| (process.env.RENDER_EXTERNAL_HOSTNAME?`https://${process.env.RENDER_EXTERNAL_HOSTNAME}`:"https://lf-orderbook1.onrender.com")).replace(/\/$/,"");
+  const vercelHost=process.env.VERCEL_PROJECT_PRODUCTION_URL||process.env.VERCEL_URL||"";
+  const publicBase=(process.env.PUBLIC_BASE_URL||(vercelHost?`https://${vercelHost}`:process.env.RENDER_EXTERNAL_HOSTNAME?`https://${process.env.RENDER_EXTERNAL_HOSTNAME}`:"https://lf-orderbook1.onrender.com")).replace(/\/$/,"");
   const url=`${publicBase}/api/telegram-webhook`;
   try{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/setWebhook`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,secret_token:telegramWebhookSecret,allowed_updates:["message"],drop_pending_updates:false}),signal:AbortSignal.timeout(10000)}),result=await upstream.json();if(!upstream.ok||!result.ok)throw new Error(result.description||"Webhook setup failed");console.log("Telegram webhook active");return true;}catch(error){console.error("Telegram webhook:",error.message);return false;}
 }
@@ -298,7 +299,7 @@ async function lastTradeApi(res){try{return json(res,200,await getLastTrade());}
 async function exchangeVolumeApi(res){try{return json(res,200,await getExchangeVolume());}catch(error){return json(res,502,{message:error.message||"Exchange volume unavailable"});}}
 async function marketApi(res){try{const [book,lastTrade]=await Promise.all([getRawOrderbook(),getLastTrade()]);return json(res,200,{book,lastTrade,serverTime:Date.now()});}catch(error){return json(res,502,{message:error.message||"Market data unavailable"});}}
 
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
   if (pathname === "/api/orderbook") return orderbook(res);
   if (pathname === "/api/dex-price") return dexPriceApi(res);
@@ -321,6 +322,19 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": entry[1], "Cache-Control": pathname === "/" ? "no-cache" : "public, max-age=3600" });
     res.end(data);
   });
-});
+};
 
-server.listen(port, host, async () => {console.log(`LF Orderbook running on ${host}:${port}`);getRawOrderbook().catch(()=>{});getLastTrade().catch(()=>{});setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();const webhookActive=await configureTelegramWebhook();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
+const server = http.createServer(requestHandler);
+
+let coreBootstrapPromise=null;
+function bootstrapCore(){
+  if(coreBootstrapPromise)return coreBootstrapPromise;
+  coreBootstrapPromise=(async()=>{getRawOrderbook().catch(()=>{});getLastTrade().catch(()=>{});const restored=await loadTelegramState();if(!restored)await saveTelegramState().catch(error=>console.error("Telegram state:",error.message));await registerTelegramCommands();return configureTelegramWebhook();})();
+  return coreBootstrapPromise;
+}
+
+function createVercelHandler(endpoint){return async(req,res)=>{const query=req.url.includes("?")?req.url.slice(req.url.indexOf("?")):"";req.url=`/api/${endpoint}${query}`;await bootstrapCore().catch(error=>console.error("Vercel bootstrap:",error.message));return requestHandler(req,res);};}
+
+if(require.main===module)server.listen(port,host,async()=>{console.log(`LF Orderbook running on ${host}:${port}`);setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const webhookActive=await bootstrapCore();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
+
+module.exports={requestHandler,createVercelHandler};
