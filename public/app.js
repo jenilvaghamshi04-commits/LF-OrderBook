@@ -170,6 +170,13 @@ function applyTheme(theme){document.documentElement.dataset.theme=theme;localSto
 document.addEventListener("DOMContentLoaded",init);
 document.addEventListener("DOMContentLoaded",()=>{loadDexPrice();setInterval(loadDexPrice,10000);});
 document.addEventListener("DOMContentLoaded",()=>{loadExchangeVolume();setInterval(loadExchangeVolume,15000);});
+document.addEventListener("DOMContentLoaded",()=>{
+  if(!location.hostname.endsWith(".onrender.com"))return;
+  const heartbeat=()=>{if(!document.hidden)fetch("/api/health?heartbeat=active",{cache:"no-store",keepalive:true}).catch(()=>{});};
+  heartbeat();
+  setInterval(heartbeat,600000);
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)heartbeat();});
+});
 const baseFillSettings=fillSettings;
 fillSettings=function(){baseFillSettings();if($("refreshMsInput")){$("refreshMsInput").value=refreshMs;$("refreshMsCurrent").textContent=`Current backup refresh: ${refreshMs} ms`;}};
 document.addEventListener("DOMContentLoaded",()=>{
