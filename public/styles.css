@@ -18,6 +18,8 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .source button.wide{padding:0 10px}
 .source button.enabled{color:#05110c;background:var(--green)}
 .source button:disabled{opacity:.4}
+.source button.refreshing{animation:refresh-spin .7s linear infinite;color:var(--green)}
+@keyframes refresh-spin{to{transform:rotate(360deg)}}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
 .live-dot.offline{background:var(--red);box-shadow:none}
 .latency-badge{padding:4px 7px;border:1px solid #244b3c;border-radius:7px;color:var(--green);font:700 10px ui-monospace,monospace;white-space:nowrap}.latency-badge.medium{color:#fbbf24;border-color:#684e19}.latency-badge.slow{color:var(--red);border-color:#6d2731}.latency-badge.waiting{color:var(--muted);border-color:var(--line)}
@@ -124,6 +126,7 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .dialog-actions button{padding:10px 15px}
 .dialog-actions .primary{border-color:var(--green);background:var(--green);color:#04100b;font-weight:750}
 .large-buy-setting{margin-top:20px;padding:14px;border:1px solid #594317;border-radius:11px;background:#f59e0b0a}
+.refresh-setting{margin-top:12px;padding:14px;border:1px solid #1e4f78;border-radius:11px;background:#3b82f60a}
 .setting-heading{display:grid;gap:4px;margin-bottom:13px}.setting-heading small{color:var(--muted);font-size:11px;line-height:1.4}
 .book-row.large-order{box-shadow:inset 3px 0 #f59e0b;background:#f59e0b12}
 .book-row.large-order span:last-child{color:#fbbf24;font-weight:750}
@@ -239,6 +242,8 @@ dialog form{padding:18px}
 [data-theme="light"] .telegram-setting{background:#f7faf8;border-color:#d5e0d9}
 [data-theme="light"] .sound-setting{background:#f7faf8;border-color:#d5e0d9}
 [data-theme="light"] .large-buy-setting{background:#fffbeb;border-color:#f1cf86}
+[data-theme="light"] .refresh-setting{background:#eff6ff;border-color:#93c5fd}
+[data-theme="light"] .refresh-setting .threshold-fields label>div{background:#fff}
 [data-theme="light"] .sound-setting select,[data-theme="light"] .sound-setting button{background:#fff;color:#34443b;border-color:#cdd9d2}
 [data-theme="light"] .telegram-setting button,[data-theme="light"] .dialog-actions button,[data-theme="light"] .order-alert button{background:#fff;color:#34443b;border-color:#cdd9d2}
 [data-theme="light"] .order-alert{background:#fff;border-color:#d5e0d9;box-shadow:0 16px 42px #173c2726}
