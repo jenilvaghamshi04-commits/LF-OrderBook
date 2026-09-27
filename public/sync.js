@@ -18,8 +18,9 @@ document.addEventListener("DOMContentLoaded",()=>{
   $("previewSound").onclick=async()=>{soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);$("soundEnabledInput").checked=true;const ctx=getAudio();if(ctx.state==="suspended")await ctx.resume().catch(()=>{});ring();};
   $("saveSettings").onclick=async event=>{
     event.preventDefault();
-    const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value),largeBuy=num($("largeBuyInput").value),largeBuyLevels=Math.round(num($("largeBuyLevelsInput").value)),button=$("saveSettings");
-    if(buy<=0||sell<=0||total<=0||largeBuy<=0||largeBuyLevels<1||largeBuyLevels>18)return;
+    const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value),largeBuy=num($("largeBuyInput").value),largeBuyLevels=Math.round(num($("largeBuyLevelsInput").value)),refresh=Math.round(num($("refreshMsInput").value)),button=$("saveSettings");
+    if(buy<=0||sell<=0||total<=0||largeBuy<=0||largeBuyLevels<1||largeBuyLevels>18||refresh<REFRESH_MIN||refresh>REFRESH_MAX)return;
+    setRefreshInterval(refresh);
     soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);
     soundEnabled=$("soundEnabledInput").checked;if(soundEnabled){localStorage.setItem(keys.sound,"enabled");await getAudio().resume().catch(()=>{});}else{localStorage.removeItem(keys.sound);stopAlarm();}updateSoundButton();
     popupsEnabled=$("popupEnabled").checked;if(popupsEnabled)localStorage.removeItem(keys.popups);else{localStorage.setItem(keys.popups,"disabled");$("alertStack").replaceChildren();}
