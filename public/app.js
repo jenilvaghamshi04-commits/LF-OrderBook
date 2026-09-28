@@ -12,6 +12,7 @@ let tradeLoading=false,latestTrade=null;
 let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates=[],streamReconnect=null,lastStreamRender=0,lastStreamMessage=0,streamOpenedAt=0,streamRenderTimer=null,lastStreamAnalysis=0;
 let refreshMs=REFRESH_DEFAULT,fallbackRefreshTimer=null;
 let liquidityScoreState={prices:[],depths:[],lastSample:0};
+let lastForcedRecovery=0;
 
 const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -78,8 +79,8 @@ async function loadExchangeVolume(){if(exchangeVolumeLoading)return;exchangeVolu
 async function loadLastTrade(){if(tradeLoading)return;tradeLoading=true;try{const response=await fetch("/api/last-trade",{cache:"no-store"}),data=await response.json();if(!response.ok)throw new Error(data.message||"Last trade unavailable");latestTrade=data;$("lastTradePrice").textContent=price(data.price);$("centerTradePrice").textContent=price(data.price);const time=data.timestamp?new Date(data.timestamp).toLocaleTimeString():"live";$("lastTradeMeta").textContent=`${data.side?data.side.toUpperCase()+" · ":""}${time}`;renderDex();}catch(error){$("lastTradeMeta").textContent=error.message;}finally{tradeLoading=false;}}
 
 async function fetchFastMarket(){
-  const direct=async()=>{const [bookResponse,tradeResponse]=await Promise.all([fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{cache:"no-store"}),fetch("https://api.gateio.ws/api/v4/spot/trades?currency_pair=LF_USDT&limit=1",{cache:"no-store"})]),book=await bookResponse.json(),trades=await tradeResponse.json(),trade=trades?.[0];if(!bookResponse.ok||!tradeResponse.ok||!Array.isArray(book.bids)||!Array.isArray(book.asks)||!num(trade?.price))throw new Error("Direct Gate.io feed unavailable");return {book,lastTrade:{price:num(trade.price),amount:num(trade.amount),side:trade.side||"",tradeId:String(trade.id||""),timestamp:num(trade.create_time_ms)||num(trade.create_time)*1000||Date.now(),source:"Gate.io direct"},feed:"direct"};};
-  const server=async()=>{const response=await fetch("/api/market",{cache:"no-store"}),market=await response.json();if(!response.ok)throw new Error(market.message||"Market data unavailable");return {...market,feed:"server"};};
+  const direct=async()=>{const signal=AbortSignal.timeout(5000),[bookResponse,tradeResponse]=await Promise.all([fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{cache:"no-store",signal}),fetch("https://api.gateio.ws/api/v4/spot/trades?currency_pair=LF_USDT&limit=1",{cache:"no-store",signal})]),book=await bookResponse.json(),trades=await tradeResponse.json(),trade=trades?.[0];if(!bookResponse.ok||!tradeResponse.ok||!Array.isArray(book.bids)||!Array.isArray(book.asks)||!num(trade?.price))throw new Error("Direct Gate.io feed unavailable");return {book,lastTrade:{price:num(trade.price),amount:num(trade.amount),side:trade.side||"",tradeId:String(trade.id||""),timestamp:num(trade.create_time_ms)||num(trade.create_time)*1000||Date.now(),source:"Gate.io direct"},feed:"direct"};};
+  const server=async()=>{const response=await fetch("/api/market",{cache:"no-store",signal:AbortSignal.timeout(8000)}),market=await response.json();if(!response.ok)throw new Error(market.message||"Market data unavailable");return {...market,feed:"server"};};
   return Promise.any([direct(),server()]);
 }
 
@@ -174,7 +175,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   if(!location.hostname.endsWith(".onrender.com"))return;
   const heartbeat=()=>{if(!document.hidden)fetch("/api/health?heartbeat=active",{cache:"no-store",keepalive:true}).catch(()=>{});};
   heartbeat();
-  setInterval(heartbeat,600000);
+  setInterval(heartbeat,300000);
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)heartbeat();});
 });
 const baseFillSettings=fillSettings;
@@ -214,4 +215,16 @@ document.addEventListener("DOMContentLoaded",()=>{
     }
   });
   document.addEventListener("pointerdown",()=>{if(soundEnabled)getAudio().resume().catch(()=>{});},{passive:true});
+});
+document.addEventListener("DOMContentLoaded",()=>{
+  const recoverLiveFeed=()=>{
+    if(document.hidden)return;
+    const now=Date.now(),healthy=streamSocket?.readyState===WebSocket.OPEN&&lastStreamMessage&&now-lastStreamMessage<5000;
+    if(healthy||now-lastForcedRecovery<5000)return;
+    lastForcedRecovery=now;streamReady=false;streamBook=null;streamUpdates=[];
+    if(streamSocket?.readyState===WebSocket.OPEN||streamSocket?.readyState===WebSocket.CONNECTING)streamSocket.close();else connectMarketStream();
+    load(true);
+  };
+  setInterval(recoverLiveFeed,2000);
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden){lastForcedRecovery=0;recoverLiveFeed();}});
 });
