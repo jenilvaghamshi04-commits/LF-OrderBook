@@ -119,7 +119,7 @@ async function getRawOrderbook(){
 }
 async function refreshOrderbook(){
   if(orderbookRequest)return orderbookRequest;
-  orderbookRequest=(async()=>{try{const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=1000&with_id=true",{headers:API_HEADERS,signal:AbortSignal.timeout(8000)}),book=await upstream.json();
+  orderbookRequest=(async()=>{try{const upstream=await fetch("https://api.gateio.ws/api/v4/spot/order_book?currency_pair=LF_USDT&limit=100&with_id=true",{headers:API_HEADERS,signal:AbortSignal.timeout(4000)}),book=await upstream.json();
     if(!upstream.ok||!Array.isArray(book?.bids)||!Array.isArray(book?.asks))throw new Error("Gate.io order book is unavailable");
     orderbookCache={book,updatedAt:Date.now()};return book;
   }catch(error){if(orderbookCache.book&&Date.now()-orderbookCache.updatedAt<15000)return orderbookCache.book;throw error;}finally{orderbookRequest=null;}})();
