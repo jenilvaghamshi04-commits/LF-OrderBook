@@ -2,6 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const zlib = require("node:zlib");
 
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
@@ -324,8 +325,9 @@ const requestHandler = async (req, res) => {
       res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
       return res.end("Server error");
     }
-    res.writeHead(200, { "Content-Type": entry[1], "Cache-Control": pathname === "/" ? "no-cache" : "public, max-age=3600" });
-    res.end(data);
+    const cacheControl=pathname==="/"||pathname==="/index.html"||pathname==="/sw.js"?"no-cache, no-store, must-revalidate":"public, max-age=3600";
+    if(data.length>1024&&/\bgzip\b/.test(req.headers["accept-encoding"]||"")){const compressed=zlib.gzipSync(data,{level:zlib.constants.Z_BEST_SPEED});res.writeHead(200,{"Content-Type":entry[1],"Cache-Control":cacheControl,"Content-Encoding":"gzip","Vary":"Accept-Encoding"});return res.end(compressed);}
+    res.writeHead(200,{"Content-Type":entry[1],"Cache-Control":cacheControl});res.end(data);
   });
 };
 
@@ -338,8 +340,6 @@ function bootstrapCore(){
   return coreBootstrapPromise;
 }
 
-function createVercelHandler(endpoint){return async(req,res)=>{const query=req.url.includes("?")?req.url.slice(req.url.indexOf("?")):"";req.url=`/api/${endpoint}${query}`;await bootstrapCore().catch(error=>console.error("Vercel bootstrap:",error.message));return requestHandler(req,res);};}
-
 if(require.main===module)server.listen(port,host,async()=>{console.log(`LF Orderbook running on ${host}:${port}`);setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const webhookActive=await bootstrapCore();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
 
-module.exports={requestHandler,createVercelHandler};
+module.exports={requestHandler};
