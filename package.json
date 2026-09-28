@@ -1,8 +1,11 @@
 {
-  "name": "lf-orderbook-fast-site",
+  "name": "lf-orderbook-render",
+  "version": "1.0.0",
   "private": true,
-  "type": "module",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "scripts": {
-    "build": "node build.mjs"
+    "start": "node server.js"
   }
 }
