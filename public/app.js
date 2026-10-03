@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const DEFAULT = 500, TOTAL_DEFAULT = 1000, RANGE = 2, REPEAT = 60000, ROWS = 18, LARGE_BUY_DEFAULT = 50, LARGE_BUY_LEVELS_DEFAULT = 5, LOW_CONFIRMATIONS = 2, CONFIRM_LOW_MS = 5000, MEDIAN_SAMPLES = 5, REFRESH_DEFAULT = 1000, REFRESH_MIN = 100, REFRESH_MAX = 10000;
-const keys = { buy: "lf-orderbook-buy-depth-threshold", sell: "lf-orderbook-sell-depth-threshold", total: "lf-orderbook-total-depth-threshold", largeBuy: "lf-orderbook-large-buy-threshold", largeBuyLevels: "lf-orderbook-large-buy-levels", refresh: "lf-orderbook-refresh-ms", legacy: "lf-orderbook-depth-threshold", sound: "lf-orderbook-sound", tone: "lf-orderbook-sound-tone", popups: "lf-orderbook-popups", telegram: "lf-orderbook-telegram", history: "lf-orderbook-depth-history", theme: "lf-orderbook-theme" };
+const keys = { buy: "lf-orderbook-buy-depth-threshold", sell: "lf-orderbook-sell-depth-threshold", total: "lf-orderbook-total-depth-threshold", largeBuy: "lf-orderbook-large-buy-threshold", largeBuyLevels: "lf-orderbook-large-buy-levels", refresh: "lf-orderbook-refresh-ms", legacy: "lf-orderbook-depth-threshold", sound: "lf-orderbook-sound", tone: "lf-orderbook-sound-tone", popups: "lf-orderbook-popups", telegram: "lf-orderbook-telegram", history: "lf-orderbook-depth-history", theme: "lf-orderbook-theme", display: "lf-orderbook-display-options" };
 let thresholds = { buy: DEFAULT, sell: DEFAULT, total: TOTAL_DEFAULT }, soundEnabled = false, soundTone = "chime", audio, alarmTimer, alarmStopTimer;
 let popupsEnabled=true;
 let largeBuySettings={amount:LARGE_BUY_DEFAULT,levels:LARGE_BUY_LEVELS_DEFAULT}, activeLargeBuys=new Set(), largeBuySeen=new Map();
@@ -13,6 +13,30 @@ let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates
 let refreshMs=REFRESH_DEFAULT,fallbackRefreshTimer=null;
 let liquidityScoreState={prices:[],depths:[],lastSample:0};
 let lastForcedRecovery=0;
+const displayDefaults={marketSummary:true,orderbook:true,marketTrades:true,liquidityScore:true,crossMarket:true,depthHistory:true};
+let displayPreferences={...displayDefaults};
+
+function loadDisplayPreferences(){
+  try{displayPreferences={...displayDefaults,...JSON.parse(localStorage.getItem(keys.display)||"{}")};}catch{displayPreferences={...displayDefaults};}
+}
+function applyDisplayPreferences(){
+  const toggle=(selector,visible)=>document.querySelector(selector)?.classList.toggle("hidden",!visible);
+  toggle(".market-strip",displayPreferences.marketSummary);
+  toggle(".orderbook",displayPreferences.orderbook);
+  toggle(".market-trades-panel",displayPreferences.marketTrades);
+  toggle("#liquidityScoreCard",displayPreferences.liquidityScore);
+  toggle(".arbitrage-panel",displayPreferences.crossMarket);
+  toggle("#depthHistory",displayPreferences.depthHistory);
+  const workspace=document.querySelector(".market-workspace"),intelligence=document.querySelector(".intelligence-grid");
+  workspace?.classList.toggle("hidden",!displayPreferences.orderbook&&!displayPreferences.marketTrades);
+  workspace?.classList.toggle("single-visible",displayPreferences.orderbook!==displayPreferences.marketTrades);
+  intelligence?.classList.toggle("hidden",!displayPreferences.liquidityScore&&!displayPreferences.crossMarket);
+  intelligence?.classList.toggle("single-visible",displayPreferences.liquidityScore!==displayPreferences.crossMarket);
+  if(displayPreferences.depthHistory)drawChart();
+}
+function readDisplaySettings(){
+  return {marketSummary:$('showMarketSummary').checked,orderbook:$('showOrderbook').checked,marketTrades:$('showMarketTrades').checked,liquidityScore:$('showLiquidityScore').checked,crossMarket:$('showCrossMarket').checked,depthHistory:$('showDepthHistory').checked};
+}
 
 const num = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
@@ -186,8 +210,9 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)heartbeat();});
 });
 const baseFillSettings=fillSettings;
-fillSettings=function(){baseFillSettings();if($("refreshMsInput")){$("refreshMsInput").value=refreshMs;$("refreshMsCurrent").textContent=`Current backup refresh: ${refreshMs} ms`;}};
+fillSettings=function(){baseFillSettings();if($("refreshMsInput")){$("refreshMsInput").value=refreshMs;$("refreshMsCurrent").textContent=`Current backup refresh: ${refreshMs} ms`;}const displayInputs={showMarketSummary:"marketSummary",showOrderbook:"orderbook",showMarketTrades:"marketTrades",showLiquidityScore:"liquidityScore",showCrossMarket:"crossMarket",showDepthHistory:"depthHistory"};for(const [id,key] of Object.entries(displayInputs))if($(id))$(id).checked=displayPreferences[key];};
 document.addEventListener("DOMContentLoaded",()=>{
+  loadDisplayPreferences();applyDisplayPreferences();
   refreshMs=normalizedRefreshMs(localStorage.getItem(keys.refresh));
   scheduleFallbackRefresh();
   fillSettings();
