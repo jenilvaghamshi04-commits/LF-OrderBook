@@ -206,6 +206,11 @@ dialog form{padding:18px}
 .chart-wrap>span{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px}
 .telegram-setting{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;margin-top:20px;padding:14px;border:1px solid #26322c;border-radius:11px}
 .popup-setting{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;margin-top:20px;padding:14px;border:1px solid #26322c;border-radius:11px}
+.display-setting{margin-top:20px;padding:14px;border:1px solid #365046;border-radius:11px;background:#22c55e08}
+.display-options{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.display-options>label{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;min-width:0;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer}
+.display-options>label>span:first-child{display:grid;gap:3px;min-width:0}.display-options b{font-size:11px}.display-options small{color:var(--muted);font-size:9px;line-height:1.35}
+.market-workspace.single-visible{grid-template-columns:1fr}.intelligence-grid.single-visible{grid-template-columns:1fr}
 .popup-setting>div{display:grid;gap:4px}.popup-setting small{color:var(--muted);line-height:1.4}
 .sound-setting{display:grid;grid-template-columns:1fr minmax(145px,auto) auto;align-items:center;gap:12px;margin-top:20px;padding:14px;border:1px solid #26322c;border-radius:11px}
 .sound-setting>div{display:grid;gap:4px}.sound-setting small{color:var(--muted)}
@@ -277,4 +282,5 @@ dialog form{padding:18px}
 .sound-setting select,.sound-setting button{width:100%}
 .telegram-setting{grid-template-columns:1fr auto}
 .telegram-setting button{grid-column:1/-1;width:100%}
+.display-options{grid-template-columns:1fr}.display-setting{padding:12px}
 }
