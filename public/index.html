@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=45">
+  <link rel="stylesheet" href="styles.css?v=50">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -66,13 +66,24 @@
       </div>
     </section>
     <div class="popup-setting"><div><strong>🪟 On-screen pop-ups</strong><small>Show website pop-ups when depth is low or a large order is detected. Sound and Telegram remain separate.</small></div><label class="switch"><input id="popupEnabled" type="checkbox"><span></span></label></div>
+    <section class="display-setting">
+      <div class="setting-heading"><strong>👁 Display options</strong><small>Choose which dashboard sections are visible. Hidden sections keep updating in the background.</small></div>
+      <div class="display-options">
+        <label><span><b>Market summary</b><small>DEX price, last trade, bid, ask, spread and volume</small></span><span class="switch"><input id="showMarketSummary" type="checkbox"><span></span></span></label>
+        <label><span><b>Order book</b><small>Live asks, bids, pressure and depth totals</small></span><span class="switch"><input id="showOrderbook" type="checkbox"><span></span></span></label>
+        <label><span><b>Market trades</b><small>Recent completed Gate.io transactions</small></span><span class="switch"><input id="showMarketTrades" type="checkbox"><span></span></span></label>
+        <label><span><b>Liquidity score</b><small>Live 0–100 market-quality score</small></span><span class="switch"><input id="showLiquidityScore" type="checkbox"><span></span></span></label>
+        <label><span><b>DEX ↔ Gate comparison</b><small>Cross-market average price and opportunity</small></span><span class="switch"><input id="showCrossMarket" type="checkbox"><span></span></span></label>
+        <label><span><b>Depth history</b><small>Buy, sell and total shortage records</small></span><span class="switch"><input id="showDepthHistory" type="checkbox"><span></span></span></label>
+      </div>
+    </section>
     <div id="alarmSoundSetting" class="sound-setting"><div><strong>🔔 Notification sound</strong><small>Enable alerts and select one of five sounds</small></div><label class="sound-enable"><input id="soundEnabledInput" type="checkbox"> Enable sound</label><select id="soundSelect" aria-label="Notification sound"><option value="chime">Soft chime</option><option value="bell">Clear bell</option><option value="pulse">Gentle pulse</option><option value="digital">Digital alert</option><option value="urgent">Urgent alarm</option></select><button id="previewSound" type="button">▶ Preview sound</button></div>
     <div class="telegram-setting"><div><strong>Telegram alerts & orderbook</strong><small id="telegramStatus">Checking Render configuration…</small><small>Commands: /price · /orderbook · /orderbook all · /buybook · /sellbook · /setdepth · /mute</small></div><label class="switch"><input id="telegramEnabled" type="checkbox"><span></span></label><button id="telegramTest" type="button" disabled>Send test</button></div>
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=49" defer></script>
-<script src="intelligence.js?v=49" defer></script>
-<script src="sync.js?v=49" defer></script>
+<script src="app.js?v=50" defer></script>
+<script src="intelligence.js?v=50" defer></script>
+<script src="sync.js?v=50" defer></script>
 </body>
 </html>
