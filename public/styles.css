@@ -88,6 +88,7 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .liquidity-totals b{font:600 12px ui-monospace,monospace}
 .liquidity-totals .low b{color:#ff6b6b}
 .liquidity-totals .ok b{color:#55d989}
+.liquidity-totals .last-trade-depth-card b{color:#f4f7f5}.trade-dot{background:#a78bfa}
 .dot{display:inline-block;width:9px;height:9px;margin-right:6px;border-radius:50%}
 .buy-dot{background:#22c55e}
 .sell-dot{background:#ef4444}
@@ -174,7 +175,7 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .price-board strong{font-size:12px}
 .price-board em{grid-column:1/-1;text-align:center}
 .liquidity-totals{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.liquidity-totals>span:last-child{grid-column:1/-1}
+.liquidity-totals>span:last-child{grid-column:auto}
 .liquidity-totals>span{min-width:0;padding:8px;border:1px solid #202a25;border-radius:9px}
 .liquidity-totals small,.liquidity-totals b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .liquidity-totals small{font-size:8.5px}
