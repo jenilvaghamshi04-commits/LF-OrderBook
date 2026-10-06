@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=54">
+  <link rel="stylesheet" href="styles.css?v=55">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -65,6 +65,12 @@
         <label class="total-threshold"><span>Backup refresh speed</span><div><input id="refreshMsInput" type="number" min="100" max="10000" step="100" inputmode="numeric"><b>MS</b></div><small id="refreshMsCurrent"></small></label>
       </div>
     </section>
+    <section class="no-trade-setting">
+      <div class="setting-heading"><strong>⏱ No-trade alert time</strong><small>Choose how long Market Trades can remain unchanged before the warning appears.</small></div>
+      <div class="threshold-fields">
+        <label class="total-threshold"><span>Alert after no new trade</span><div><input id="noTradeMinutesInput" type="number" min="1" max="120" step="1" inputmode="numeric"><b>MINUTES</b></div><small id="noTradeMinutesCurrent"></small></label>
+      </div>
+    </section>
     <div class="popup-setting"><div><strong>🪟 On-screen pop-ups</strong><small>Show website pop-ups for low depth, large orders, and no-trade warnings. Sound and Telegram remain separate.</small></div><label class="switch"><input id="popupEnabled" type="checkbox"><span></span></label></div>
     <section class="display-setting">
       <div class="setting-heading"><strong>👁 Display options</strong><small>Choose which dashboard sections are visible. Hidden sections keep updating in the background.</small></div>
@@ -82,8 +88,8 @@
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=54" defer></script>
-<script src="intelligence.js?v=54" defer></script>
-<script src="sync.js?v=54" defer></script>
+<script src="app.js?v=55" defer></script>
+<script src="intelligence.js?v=55" defer></script>
+<script src="sync.js?v=55" defer></script>
 </body>
 </html>
