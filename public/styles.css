@@ -100,11 +100,13 @@ footer{display:flex;justify-content:space-between;padding:15px 3px 0}
 .order-alert.sell{border-left:3px solid #ef4444}
 .order-alert.total{border-left:3px solid #3b82f6}
 .order-alert.large-buy{border-left:3px solid #f59e0b}
+.order-alert.no-trade{border-left:3px solid #f59e0b}
 .alert-dot{width:14px;height:14px;border-radius:50%;background:currentColor}
 .order-alert.buy .alert-dot{color:#22c55e}
 .order-alert.sell .alert-dot{color:#ef4444}
 .order-alert.total .alert-dot{color:#3b82f6}
 .order-alert.large-buy .alert-dot{color:#f59e0b}
+.order-alert.no-trade .alert-dot{color:#f59e0b}
 .order-alert>div{display:grid;gap:3px}
 .order-alert small{color:var(--muted);font-size:11px}
 .order-alert b{font:600 13px ui-monospace,monospace}
