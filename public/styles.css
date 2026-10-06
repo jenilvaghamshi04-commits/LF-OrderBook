@@ -82,8 +82,8 @@ main{width:min(1040px,100%);min-height:100vh;margin:auto;padding:0 24px 26px}
 .price-board .dex-price-box{border-color:#3b82f666}
 .price-board .dex-price-box strong{color:#60a5fa}
 .price-board em{padding:5px 8px;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:9px;font-style:normal;white-space:nowrap}
-.liquidity-totals{display:flex;gap:28px}
-.liquidity-totals>span{display:grid;gap:3px}
+.liquidity-totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;width:100%}
+.liquidity-totals>span{display:grid;align-content:center;gap:3px;min-width:0;padding:8px 10px;border:1px solid #202a25;border-radius:9px}
 .liquidity-totals small{color:var(--muted);font-size:10px;text-transform:uppercase}
 .liquidity-totals b{font:600 12px ui-monospace,monospace}
 .liquidity-totals .low b{color:#ff6b6b}
@@ -174,9 +174,9 @@ dialog p{margin:0 40px 20px 0;color:var(--muted);line-height:1.5}
 .price-board small{font-size:7.5px}
 .price-board strong{font-size:12px}
 .price-board em{grid-column:1/-1;text-align:center}
-.liquidity-totals{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.liquidity-totals{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
 .liquidity-totals>span:last-child{grid-column:auto}
-.liquidity-totals>span{min-width:0;padding:8px;border:1px solid #202a25;border-radius:9px}
+.liquidity-totals>span{min-width:0;padding:8px}
 .liquidity-totals small,.liquidity-totals b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .liquidity-totals small{font-size:8.5px}
 .liquidity-totals b{font-size:10px}
