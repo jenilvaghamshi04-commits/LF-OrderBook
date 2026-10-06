@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=51">
+  <link rel="stylesheet" href="styles.css?v=52">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -28,7 +28,7 @@
     <div class="columns"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div>
     <div id="asks" class="book-rows loading">Loading market depth…</div>
     <div class="price-board"><div class="mid-price-box"><small>Last Trade Price (Gate.io)</small><strong id="centerTradePrice">—</strong></div><div class="dex-price-box"><small>Live Pool Price (LF/WETH × ETH/USD)</small><strong id="dexCenterPrice">—</strong></div><em id="dexDifference">Pool difference —</em></div>
-    <div class="spread-line"><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span><span class="last-trade-depth-card"><small><i class="dot trade-dot"></i>Last trade price</small><b id="depthLastTradePrice">—</b></span></div><small id="centerSpread">Spread —</small></div>
+    <div class="spread-line"><div class="liquidity-totals"><span id="buyCard"><small><i class="dot buy-dot"></i>Buy depth (−2%)</small><b id="buyDepth">—</b></span><span id="sellCard"><small><i class="dot sell-dot"></i>Sell depth (+2%)</small><b id="sellDepth">—</b></span><span id="totalCard"><small><i class="dot total-dot"></i>Total depth (buy + sell)</small><b id="totalDepth">—</b></span><span class="last-trade-depth-card"><small><i class="dot trade-dot"></i>Last trade price</small><b id="depthLastTradePrice">—</b><em id="depthLastTradeTime">Waiting for trade…</em></span></div><small id="centerSpread">Spread —</small></div>
     <div id="bids" class="book-rows"></div>
   </section>
   <article class="intel-panel tape-panel market-trades-panel"><div class="intel-head"><div><span>Completed transactions</span><h2>Market trades</h2></div><b id="tapePressure">B 50% · S 50%</b></div><div class="tape-columns"><span>Time</span><span>Side</span><span>Price</span><span>Value</span></div><div id="tradeTape" class="trade-tape"><div class="tape-empty">Loading recent trades…</div></div></article>
@@ -82,8 +82,8 @@
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=51" defer></script>
-<script src="intelligence.js?v=51" defer></script>
-<script src="sync.js?v=51" defer></script>
+<script src="app.js?v=52" defer></script>
+<script src="intelligence.js?v=52" defer></script>
+<script src="sync.js?v=52" defer></script>
 </body>
 </html>
