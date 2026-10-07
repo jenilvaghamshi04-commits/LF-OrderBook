@@ -6,6 +6,7 @@ async function syncSharedSettings(){
     settingsProtected=!!settings.adminProtected;
     const changed=thresholds.buy!==settings.buy||thresholds.sell!==settings.sell||thresholds.total!==settings.total;
     thresholds={buy:num(settings.buy),sell:num(settings.sell),total:num(settings.total)};
+    if(settings.opportunity)opportunitySettings={...opportunitySettings,...settings.opportunity};
     localStorage.setItem(keys.buy,String(thresholds.buy));localStorage.setItem(keys.sell,String(thresholds.sell));localStorage.setItem(keys.total,String(thresholds.total));
     if(changed){previousLow={buy:false,sell:false,total:false,ready:false};lastAlert={buy:0,sell:0,total:0};fillSettings();load();}
   }catch(error){console.error("Settings sync:",error.message);}
@@ -18,8 +19,8 @@ document.addEventListener("DOMContentLoaded",()=>{
   $("previewSound").onclick=async()=>{soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);$("soundEnabledInput").checked=true;const ctx=getAudio();if(ctx.state==="suspended")await ctx.resume().catch(()=>{});ring();};
   $("saveSettings").onclick=async event=>{
     event.preventDefault();
-    const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value),largeBuy=num($("largeBuyInput").value),largeBuyLevels=Math.round(num($("largeBuyLevelsInput").value)),refresh=Math.round(num($("refreshMsInput").value)),noTradeTime=Math.round(num($("noTradeMinutesInput").value)),button=$("saveSettings");
-    if(buy<=0||sell<=0||total<=0||largeBuy<=0||largeBuyLevels<1||largeBuyLevels>18||refresh<REFRESH_MIN||refresh>REFRESH_MAX||noTradeTime<NO_TRADE_MIN_MINUTES||noTradeTime>NO_TRADE_MAX_MINUTES)return;
+    const buy=num($("buyInput").value),sell=num($("sellInput").value),total=num($("totalInput").value),largeBuy=num($("largeBuyInput").value),largeBuyLevels=Math.round(num($("largeBuyLevelsInput").value)),refresh=Math.round(num($("refreshMsInput").value)),noTradeTime=Math.round(num($("noTradeMinutesInput").value)),opportunity={enabled:$("opportunityEnabled").checked,tradeSize:num($("opportunityTradeSize").value),minProfit:num($("opportunityMinProfit").value),gas:num($("opportunityGas").value),gateFeePct:num($("opportunityGateFee").value),dexFeePct:num($("opportunityDexFee").value)},button=$("saveSettings");
+    if(buy<=0||sell<=0||total<=0||largeBuy<=0||largeBuyLevels<1||largeBuyLevels>18||refresh<REFRESH_MIN||refresh>REFRESH_MAX||noTradeTime<NO_TRADE_MIN_MINUTES||noTradeTime>NO_TRADE_MAX_MINUTES||opportunity.tradeSize<=0||[opportunity.minProfit,opportunity.gas,opportunity.gateFeePct,opportunity.dexFeePct].some(value=>value<0))return;
     setRefreshInterval(refresh);
     noTradeMinutes=noTradeTime;localStorage.setItem(keys.noTradeMinutes,String(noTradeMinutes));resetNoTradeAlert();checkNoTradeActivity();
     soundTone=$("soundSelect").value;localStorage.setItem(keys.tone,soundTone);
@@ -31,11 +32,12 @@ document.addEventListener("DOMContentLoaded",()=>{
     try{
       let adminCode=settingsProtected?(sessionStorage.getItem("lf-orderbook-admin-code")||""):"";
       if(settingsProtected&&!adminCode){adminCode=window.prompt("Enter the monitor admin code to save shared settings")||"";}
-      const response=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json",...(adminCode?{Authorization:`Bearer ${adminCode}`}:{})},body:JSON.stringify({buy,sell,total})}),result=await response.json();
+      const response=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json",...(adminCode?{Authorization:`Bearer ${adminCode}`}:{})},body:JSON.stringify({buy,sell,total,opportunity})}),result=await response.json();
       if(response.status===401)sessionStorage.removeItem("lf-orderbook-admin-code");
       if(!response.ok)throw new Error(result.message||"Could not save settings");
       if(adminCode)sessionStorage.setItem("lf-orderbook-admin-code",adminCode);
       thresholds={buy:result.buy,sell:result.sell,total:result.total};
+      opportunitySettings={...opportunitySettings,...result.opportunity};
       localStorage.setItem(keys.buy,String(result.buy));localStorage.setItem(keys.sell,String(result.sell));localStorage.setItem(keys.total,String(result.total));
       previousLow={buy:false,sell:false,total:false,ready:false};lastAlert={buy:0,sell:0,total:0};stopAlarm();fillSettings();$("settingsDialog").close();load();
     }catch(error){$("telegramStatus").textContent=`Settings error: ${error.message}`;}
