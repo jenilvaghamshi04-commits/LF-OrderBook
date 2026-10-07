@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=55">
+  <link rel="stylesheet" href="styles.css?v=56">
   <title>LF / USDT Order Book</title>
 </head>
 <body>
@@ -71,6 +71,18 @@
         <label class="total-threshold"><span>Alert after no new trade</span><div><input id="noTradeMinutesInput" type="number" min="1" max="120" step="1" inputmode="numeric"><b>MINUTES</b></div><small id="noTradeMinutesCurrent"></small></label>
       </div>
     </section>
+    <section class="opportunity-setting">
+      <div class="setting-heading"><strong>💰 Exchange–DEX opportunity alert</strong><small>Alert only when estimated profit remains after DEX price impact, Gate fee, DEX fee and gas.</small></div>
+      <div class="opportunity-toggle"><span><b>Enable net-profit alerts</b><small>Telegram works even when this website is closed</small></span><label class="switch"><input id="opportunityEnabled" type="checkbox"><span></span></label></div>
+      <div class="threshold-fields opportunity-fields">
+        <label><span>Trade size</span><div><input id="opportunityTradeSize" type="number" min="1" step="1" inputmode="decimal"><b>USDT</b></div></label>
+        <label><span>Minimum net profit</span><div><input id="opportunityMinProfit" type="number" min="0" step="0.1" inputmode="decimal"><b>USDT</b></div></label>
+        <label><span>Estimated gas</span><div><input id="opportunityGas" type="number" min="0" step="0.1" inputmode="decimal"><b>USDT</b></div></label>
+        <label><span>Gate trading fee</span><div><input id="opportunityGateFee" type="number" min="0" step="0.01" inputmode="decimal"><b>%</b></div></label>
+        <label><span>DEX swap fee</span><div><input id="opportunityDexFee" type="number" min="0" step="0.01" inputmode="decimal"><b>%</b></div></label>
+      </div>
+      <small class="opportunity-note">Both routes are checked: Buy DEX → Sell Gate and Buy Gate → Sell DEX. Estimates do not include withdrawal, bridge or transfer delays.</small>
+    </section>
     <div class="popup-setting"><div><strong>🪟 On-screen pop-ups</strong><small>Show website pop-ups for low depth, large orders, and no-trade warnings. Sound and Telegram remain separate.</small></div><label class="switch"><input id="popupEnabled" type="checkbox"><span></span></label></div>
     <section class="display-setting">
       <div class="setting-heading"><strong>👁 Display options</strong><small>Choose which dashboard sections are visible. Hidden sections keep updating in the background.</small></div>
@@ -84,12 +96,12 @@
       </div>
     </section>
     <div id="alarmSoundSetting" class="sound-setting"><div><strong>🔔 Notification sound</strong><small>Enable alerts and select one of five sounds</small></div><label class="sound-enable"><input id="soundEnabledInput" type="checkbox"> Enable sound</label><select id="soundSelect" aria-label="Notification sound"><option value="chime">Soft chime</option><option value="bell">Clear bell</option><option value="pulse">Gentle pulse</option><option value="digital">Digital alert</option><option value="urgent">Urgent alarm</option></select><button id="previewSound" type="button">▶ Preview sound</button></div>
-    <div class="telegram-setting"><div><strong>Telegram alerts & orderbook</strong><small id="telegramStatus">Checking Render configuration…</small><small>Commands: /price · /orderbook · /orderbook all · /buybook · /sellbook · /setdepth · /mute</small></div><label class="switch"><input id="telegramEnabled" type="checkbox"><span></span></label><button id="telegramTest" type="button" disabled>Send test</button></div>
+    <div class="telegram-setting"><div><strong>Telegram alerts & orderbook</strong><small id="telegramStatus">Checking Render configuration…</small><small>Commands: /price · /opportunity · /orderbook · /report · /setdepth · /mute</small></div><label class="switch"><input id="telegramEnabled" type="checkbox"><span></span></label><button id="telegramTest" type="button" disabled>Send test</button></div>
     <div class="dialog-actions"><button value="cancel">Cancel</button><button id="saveSettings" class="primary" value="default">Save settings</button></div>
   </form>
 </dialog>
-<script src="app.js?v=55" defer></script>
-<script src="intelligence.js?v=55" defer></script>
-<script src="sync.js?v=55" defer></script>
+<script src="app.js?v=56" defer></script>
+<script src="intelligence.js?v=56" defer></script>
+<script src="sync.js?v=56" defer></script>
 </body>
 </html>
