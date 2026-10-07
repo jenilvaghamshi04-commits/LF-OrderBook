@@ -27,6 +27,8 @@ const telegramChatIds = [...new Set([telegramChatId, telegramChatId2].map(value=
 let telegramBuyThreshold = Number(process.env.TELEGRAM_BUY_THRESHOLD) || 500;
 let telegramSellThreshold = Number(process.env.TELEGRAM_SELL_THRESHOLD) || 300;
 let telegramTotalThreshold = Number(process.env.TELEGRAM_TOTAL_THRESHOLD) || 1000;
+let opportunitySettings={enabled:true,tradeSize:1000,gateFeePct:.2,dexFeePct:.3,gas:5,minProfit:10};
+let opportunityActive={dexToGate:false,gateToDex:false};
 const telegramCooldown = new Map();
 const telegramLowSince = new Map();
 const CONFIRM_LOW_MS = 60000;
@@ -95,22 +97,22 @@ async function broadcastTelegram(message){
 }
 async function saveTelegramState(){
   if(!telegramToken)return;
-  const description=`LF Orderbook monitor. Shared v3: buy=${telegramBuyThreshold};sell=${telegramSellThreshold};total=${telegramTotalThreshold};muted=${telegramMuted?1:0};report=${lastDailyReportKey||"-"}`;
+  const o=opportunitySettings,description=`LF monitor. Shared v4: buy=${telegramBuyThreshold};sell=${telegramSellThreshold};total=${telegramTotalThreshold};muted=${telegramMuted?1:0};report=${lastDailyReportKey||"-"};opp=${o.enabled?1:0},${o.tradeSize},${o.gateFeePct},${o.dexFeePct},${o.gas},${o.minProfit}`;
   const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/setMyDescription`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description}),signal:AbortSignal.timeout(10000)}),result=await upstream.json();
   if(!upstream.ok||!result.ok)throw new Error(result.description||"Could not save Telegram settings");
 }
 async function loadTelegramState(){
   if(!telegramToken)return;
-  try{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/getMyDescription`,{signal:AbortSignal.timeout(10000)}),result=await upstream.json(),description=result?.result?.description||"",match=description.match(/Shared v(?:2|3): buy=([\d.]+);sell=([\d.]+);total=([\d.]+);muted=([01])(?:;report=([\d-]+|-))?/);
-    if(match){telegramBuyThreshold=Number(match[1])||telegramBuyThreshold;telegramSellThreshold=Number(match[2])||telegramSellThreshold;telegramTotalThreshold=Number(match[3])||telegramTotalThreshold;telegramMuted=match[4]==="1";lastDailyReportKey=match[5]&&match[5]!=="-"?match[5]:"";return true;}
+  try{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/getMyDescription`,{signal:AbortSignal.timeout(10000)}),result=await upstream.json(),description=result?.result?.description||"",match=description.match(/Shared v(?:2|3|4): buy=([\d.]+);sell=([\d.]+);total=([\d.]+);muted=([01])(?:;report=([\d-]+|-))?(?:;opp=([01]),([\d.]+),([\d.]+),([\d.]+),([\d.]+),([\d.]+))?/);
+    if(match){telegramBuyThreshold=Number(match[1])||telegramBuyThreshold;telegramSellThreshold=Number(match[2])||telegramSellThreshold;telegramTotalThreshold=Number(match[3])||telegramTotalThreshold;telegramMuted=match[4]==="1";lastDailyReportKey=match[5]&&match[5]!=="-"?match[5]:"";if(match[6])opportunitySettings={enabled:match[6]==="1",tradeSize:Number(match[7]),gateFeePct:Number(match[8]),dexFeePct:Number(match[9]),gas:Number(match[10]),minProfit:Number(match[11])};return true;}
   }catch(error){console.error("Telegram state:",error.message);}return false;
 }
-function sharedSettings(){return {buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold,muted:telegramMuted,adminProtected:!!settingsAdminToken};}
+function sharedSettings(){return {buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold,muted:telegramMuted,opportunity:opportunitySettings,adminProtected:!!settingsAdminToken};}
 async function settingsApi(req,res){
   if(req.method==="GET")return json(res,200,sharedSettings());
   if(req.method!=="POST")return json(res,405,{message:"Method not allowed"});
   if(settingsAdminToken){const supplied=String(req.headers.authorization||"").replace(/^Bearer\s+/i,"");const expected=Buffer.from(settingsAdminToken),actual=Buffer.from(supplied);if(!supplied||expected.length!==actual.length||!crypto.timingSafeEqual(expected,actual))return json(res,401,{message:"Admin code is required to change shared settings"});}
-  try{const data=await readJson(req),buy=Number(data.buy),sell=Number(data.sell),total=Number(data.total);if([buy,sell,total].some(value=>!Number.isFinite(value)||value<=0||value>1000000000))return json(res,400,{message:"Enter valid buy, sell, and total amounts"});telegramBuyThreshold=buy;telegramSellThreshold=sell;telegramTotalThreshold=total;telegramCooldown.clear();await saveTelegramState();return json(res,200,{saved:true,...sharedSettings()});}catch(error){return json(res,502,{message:error.message||"Could not save shared settings"});}
+  try{const data=await readJson(req),buy=Number(data.buy),sell=Number(data.sell),total=Number(data.total),incoming=data.opportunity||opportunitySettings,opportunity={enabled:incoming.enabled!==false,tradeSize:Number(incoming.tradeSize),gateFeePct:Number(incoming.gateFeePct),dexFeePct:Number(incoming.dexFeePct),gas:Number(incoming.gas),minProfit:Number(incoming.minProfit)};if([buy,sell,total].some(value=>!Number.isFinite(value)||value<=0||value>1000000000))return json(res,400,{message:"Enter valid buy, sell, and total amounts"});if(!Number.isFinite(opportunity.tradeSize)||opportunity.tradeSize<=0||opportunity.tradeSize>10000000||[opportunity.gateFeePct,opportunity.dexFeePct,opportunity.gas,opportunity.minProfit].some(value=>!Number.isFinite(value)||value<0))return json(res,400,{message:"Enter valid opportunity alert settings"});telegramBuyThreshold=buy;telegramSellThreshold=sell;telegramTotalThreshold=total;opportunitySettings=opportunity;opportunityActive={dexToGate:false,gateToDex:false};telegramCooldown.clear();await saveTelegramState();return json(res,200,{saved:true,...sharedSettings()});}catch(error){return json(res,502,{message:error.message||"Could not save shared settings"});}
 }
 async function getDepthSnapshot(){
   const [book,trade]=await Promise.all([getRawOrderbook(),getLastTrade()]);
@@ -244,6 +246,23 @@ async function refreshDexPrice(){
   })().finally(()=>{dexRequest=null;});
   return dexRequest;
 }
+function walkGateByQuantity(levels,quantity){let remaining=quantity,notional=0;for(const [rawPrice,rawQty] of levels||[]){const price=Number(rawPrice),available=Number(rawQty),filled=Math.min(remaining,available);if(price<=0||available<=0)continue;notional+=filled*price;remaining-=filled;if(remaining<=Math.max(quantity*1e-10,1e-9))return {filled:true,quantity,notional,average:notional/quantity};}return {filled:false};}
+function buyGateByQuote(levels,quote){let remaining=quote,quantity=0,spent=0;for(const [rawPrice,rawQty] of levels||[]){const price=Number(rawPrice),available=Number(rawQty);if(price<=0||available<=0)continue;const value=Math.min(remaining,price*available),filled=value/price;quantity+=filled;spent+=value;remaining-=value;if(remaining<=Math.max(quote*1e-10,1e-9))return {filled:true,quantity,notional:spent,average:spent/quantity};}return {filled:false};}
+function dexQuote(side,input,dex){const spot=Number(dex.price),liquidity=Number(dex.liquidity),fee=opportunitySettings.dexFeePct/100;if(!spot||!liquidity||input<=0)return {filled:false};const reserveUsd=liquidity/2,reserveLf=reserveUsd/spot;if(side==="buy"){const effective=input*(1-fee),output=reserveLf*effective/(reserveUsd+effective),average=output?input/output:0;return {filled:!!output,output,average,impactPct:average/spot*100-100};}const effective=input*(1-fee),output=reserveUsd*effective/(reserveLf+effective),average=input?output/input:0;return {filled:!!output,output,average,impactPct:average/spot*100-100};}
+async function calculateOpportunities(){
+  const [book,dex]=await Promise.all([getRawOrderbook(),getDexPrice()]),size=opportunitySettings.tradeSize,gateFee=opportunitySettings.gateFeePct/100,gas=opportunitySettings.gas;
+  const dexBuy=dexQuote("buy",size,dex),gateSell=dexBuy.filled?walkGateByQuantity(book.bids,dexBuy.output):{filled:false};
+  const dexToGate=dexBuy.filled&&gateSell.filled?{valid:true,direction:"Buy DEX → Sell Gate",tradeSize:size,dexAverage:dexBuy.average,gateAverage:gateSell.average,impactPct:dexBuy.impactPct,gateFee:gateSell.notional*gateFee,gas,netProfit:gateSell.notional-size-gateSell.notional*gateFee-gas}: {valid:false,direction:"Buy DEX → Sell Gate"};
+  const gateBuy=buyGateByQuote(book.asks,size),dexSell=gateBuy.filled?dexQuote("sell",gateBuy.quantity,dex):{filled:false};
+  const gateToDex=gateBuy.filled&&dexSell.filled?{valid:true,direction:"Buy Gate → Sell DEX",tradeSize:size,dexAverage:dexSell.average,gateAverage:gateBuy.average,impactPct:dexSell.impactPct,gateFee:size*gateFee,gas,netProfit:dexSell.output-size-size*gateFee-gas}: {valid:false,direction:"Buy Gate → Sell DEX"};
+  for(const item of [dexToGate,gateToDex])if(item.valid)item.netPct=item.netProfit/size*100;
+  return {dexToGate,gateToDex,settings:opportunitySettings,dexPrice:dex.price,updatedAt:Date.now()};
+}
+async function monitorOpportunity(){
+  if(!telegramToken||!opportunitySettings.enabled||telegramMuted)return;
+  try{const result=await calculateOpportunities();for(const [key,item] of Object.entries({dexToGate:result.dexToGate,gateToDex:result.gateToDex})){const profitable=item.valid&&item.netProfit>=opportunitySettings.minProfit;if(profitable&&!opportunityActive[key])await sendTelegramMessage(`💰 LF/USDT NET OPPORTUNITY\n${item.direction}\nTrade size: ${item.tradeSize.toFixed(2)} USDT\nDEX average: ${item.dexAverage.toFixed(10)}\nGate average: ${item.gateAverage.toFixed(10)}\nDEX price impact: ${item.impactPct.toFixed(3)}%\nGate fee: ${item.gateFee.toFixed(2)} USDT\nGas: ${item.gas.toFixed(2)} USDT\nEstimated net profit: +${item.netProfit.toFixed(2)} USDT (+${item.netPct.toFixed(3)}%)\nTarget: ${opportunitySettings.minProfit.toFixed(2)} USDT\n\nEstimate only — confirm executable prices before trading.`,`opportunity-${key}`);opportunityActive[key]=profitable;}}
+  catch(error){console.error("Opportunity monitor:",error.message);}
+}
 function telegramBookChunks(book,side,count,dex){
   const asks=book.asks||[],bids=book.bids||[],ask=Number(asks[0]?.[0]),bid=Number(bids[0]?.[0]),mid=ask&&bid?(ask+bid)/2:0;
   const sections=[];
@@ -293,6 +312,10 @@ async function handleTelegramCommand(text){
     return "⚙️ Set depth commands\n/setbuy 400\n/setsell 300\n/settotal 700\n/setdepth 400 300 700\n/setdepth buy 400";
   }
   if(command==="/settings")return `⚙️ LF/USDT alert settings\nBuy minimum: ${telegramBuyThreshold.toFixed(2)} USDT\nSell minimum: ${telegramSellThreshold.toFixed(2)} USDT\nTotal minimum: ${telegramTotalThreshold.toFixed(2)} USDT\nDepth range: ±2% from last trade price\nRepeat interval: 1 minute\nAlerts: ${telegramMuted?"Muted":"Active"}\nDaily report: ${String(DAILY_REPORT_HOUR_IST).padStart(2,"0")}:00 India time`;
+  if(command==="/opportunity"){
+    const result=await calculateOpportunities(),format=item=>item.valid?`${item.direction}\nNet: ${item.netProfit>=0?"+":""}${item.netProfit.toFixed(2)} USDT (${item.netPct>=0?"+":""}${item.netPct.toFixed(3)}%)\nDEX avg: ${item.dexAverage.toFixed(10)}\nGate avg: ${item.gateAverage.toFixed(10)}`:`${item.direction}\nInsufficient executable liquidity`;
+    return `💱 LF/USDT OPPORTUNITY CHECK\nTrade size: ${result.settings.tradeSize.toFixed(2)} USDT\nTarget: ${result.settings.minProfit.toFixed(2)} USDT\nFees: Gate ${result.settings.gateFeePct.toFixed(2)}% · DEX ${result.settings.dexFeePct.toFixed(2)}% · Gas ${result.settings.gas.toFixed(2)} USDT\n\n${format(result.dexToGate)}\n\n${format(result.gateToDex)}`;
+  }
   if(command==="/report"){
     const requested=(args[0]||"today").toLowerCase(),date=requested==="yesterday"?new Date(Date.now()-86400000):new Date(),key=istDateKey(date),range=dayRangeIst(key);
     return buildDailyReport(key,requested==="yesterday"?range.end:Date.now());
@@ -339,7 +362,7 @@ async function pollTelegramCommands(){
 }
 async function registerTelegramCommands(){
   if(!telegramToken)return;
-  try{await fetch(`https://api.telegram.org/bot${telegramToken}/setMyCommands`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({commands:[{command:"status",description:"Check monitor health"},{command:"depth",description:"Show ±2% depth totals"},{command:"price",description:"Show DEX and last trade prices"},{command:"orderbook",description:"Show buy and sell orders"},{command:"buybook",description:"Show buy-side orders"},{command:"sellbook",description:"Show sell-side orders"},{command:"report",description:"Show today's daily report"},{command:"setdepth",description:"Change depth targets"},{command:"setbuy",description:"Set buy minimum"},{command:"setsell",description:"Set sell minimum"},{command:"settotal",description:"Set total minimum"},{command:"mute",description:"Mute or resume alerts"},{command:"settings",description:"Show alert settings"}]}),signal:AbortSignal.timeout(10000)});}catch(error){console.error("Telegram command setup:",error.message);}
+  try{await fetch(`https://api.telegram.org/bot${telegramToken}/setMyCommands`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({commands:[{command:"status",description:"Check monitor health"},{command:"depth",description:"Show ±2% depth totals"},{command:"price",description:"Show DEX and last trade prices"},{command:"opportunity",description:"Check net DEX–Gate opportunity"},{command:"orderbook",description:"Show buy and sell orders"},{command:"buybook",description:"Show buy-side orders"},{command:"sellbook",description:"Show sell-side orders"},{command:"report",description:"Show today's daily report"},{command:"setdepth",description:"Change depth targets"},{command:"setbuy",description:"Set buy minimum"},{command:"setsell",description:"Set sell minimum"},{command:"settotal",description:"Set total minimum"},{command:"mute",description:"Mute or resume alerts"},{command:"settings",description:"Show alert settings"}]}),signal:AbortSignal.timeout(10000)});}catch(error){console.error("Telegram command setup:",error.message);}
 }
 async function configureTelegramWebhook(){
   if(!telegramToken)return false;
@@ -373,6 +396,7 @@ async function dexPriceApi(res){try{return json(res,200,await getDexPrice());}ca
 async function lastTradeApi(res){try{return json(res,200,await getLastTrade());}catch(error){return json(res,502,{message:error.message||"Last trade unavailable"});}}
 async function exchangeVolumeApi(res){try{return json(res,200,await getExchangeVolume());}catch(error){return json(res,502,{message:error.message||"Exchange volume unavailable"});}}
 async function marketApi(res){try{const [book,lastTrade]=await Promise.all([getRawOrderbook(),getLastTrade()]);return json(res,200,{book,lastTrade,serverTime:Date.now()});}catch(error){return json(res,502,{message:error.message||"Market data unavailable"});}}
+async function opportunityApi(res){try{return json(res,200,await calculateOpportunities());}catch(error){return json(res,502,{message:error.message||"Opportunity calculation unavailable"});}}
 function healthApi(req,res){if(!["GET","HEAD"].includes(req.method))return json(res,405,{message:"Method not allowed"});res.writeHead(200,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});if(req.method==="HEAD")return res.end();res.end(JSON.stringify({ok:true,service:"LF OrderBook",serverTime:Date.now(),uptimeSeconds:Math.round(process.uptime())}));}
 
 const requestHandler = async (req, res) => {
@@ -382,6 +406,7 @@ const requestHandler = async (req, res) => {
   if (pathname === "/api/last-trade") return lastTradeApi(res);
   if (pathname === "/api/exchange-volume") return exchangeVolumeApi(res);
   if (pathname === "/api/market") return marketApi(res);
+  if (pathname === "/api/opportunity") return opportunityApi(res);
   if (pathname === "/api/health") return healthApi(req, res);
   if (pathname === "/api/telegram") return telegram(req, res);
   if (pathname === "/api/settings") return settingsApi(req, res);
@@ -411,6 +436,6 @@ function bootstrapCore(){
   return coreBootstrapPromise;
 }
 
-if(require.main===module)server.listen(port,host,async()=>{console.log(`LF Orderbook running on ${host}:${port}`);setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const webhookActive=await bootstrapCore();monitorDepth();maybeSendDailyReport();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);setInterval(maybeSendDailyReport,60000);});
+if(require.main===module)server.listen(port,host,async()=>{console.log(`LF Orderbook running on ${host}:${port}`);setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const webhookActive=await bootstrapCore();monitorDepth();monitorOpportunity();maybeSendDailyReport();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);setInterval(monitorOpportunity,10000);setInterval(maybeSendDailyReport,60000);});
 
 module.exports={requestHandler};
