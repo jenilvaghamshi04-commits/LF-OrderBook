@@ -14,6 +14,7 @@ let streamSocket=null,streamBook=null,streamId=0,streamReady=false,streamUpdates
 let refreshMs=REFRESH_DEFAULT,fallbackRefreshTimer=null;
 let liquidityScoreState={prices:[],depths:[],lastSample:0};
 let lastForcedRecovery=0;
+let opportunitySettings={enabled:true,tradeSize:1000,gateFeePct:.2,dexFeePct:.3,gas:5,minProfit:10};
 const displayDefaults={marketSummary:true,orderbook:true,marketTrades:true,liquidityScore:true,crossMarket:true,depthHistory:true};
 let displayPreferences={...displayDefaults};
 
@@ -217,7 +218,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)heartbeat();});
 });
 const baseFillSettings=fillSettings;
-fillSettings=function(){baseFillSettings();if($("refreshMsInput")){$("refreshMsInput").value=refreshMs;$("refreshMsCurrent").textContent=`Current backup refresh: ${refreshMs} ms`;}if($("noTradeMinutesInput")){$("noTradeMinutesInput").value=noTradeMinutes;$("noTradeMinutesCurrent").textContent=`Current warning time: ${noTradeDurationLabel()}`;}const displayInputs={showMarketSummary:"marketSummary",showOrderbook:"orderbook",showMarketTrades:"marketTrades",showLiquidityScore:"liquidityScore",showCrossMarket:"crossMarket",showDepthHistory:"depthHistory"};for(const [id,key] of Object.entries(displayInputs))if($(id))$(id).checked=displayPreferences[key];};
+fillSettings=function(){baseFillSettings();if($("refreshMsInput")){$("refreshMsInput").value=refreshMs;$("refreshMsCurrent").textContent=`Current backup refresh: ${refreshMs} ms`;}if($("noTradeMinutesInput")){$("noTradeMinutesInput").value=noTradeMinutes;$("noTradeMinutesCurrent").textContent=`Current warning time: ${noTradeDurationLabel()}`;}if($("opportunityEnabled")){$("opportunityEnabled").checked=opportunitySettings.enabled;$("opportunityTradeSize").value=opportunitySettings.tradeSize;$("opportunityMinProfit").value=opportunitySettings.minProfit;$("opportunityGas").value=opportunitySettings.gas;$("opportunityGateFee").value=opportunitySettings.gateFeePct;$("opportunityDexFee").value=opportunitySettings.dexFeePct;}const displayInputs={showMarketSummary:"marketSummary",showOrderbook:"orderbook",showMarketTrades:"marketTrades",showLiquidityScore:"liquidityScore",showCrossMarket:"crossMarket",showDepthHistory:"depthHistory"};for(const [id,key] of Object.entries(displayInputs))if($(id))$(id).checked=displayPreferences[key];};
 document.addEventListener("DOMContentLoaded",()=>{
   loadDisplayPreferences();applyDisplayPreferences();
   refreshMs=normalizedRefreshMs(localStorage.getItem(keys.refresh));
