@@ -54,7 +54,14 @@ let exchangeVolumeRequest=null;
 let telegramMuted = false;
 let telegramUpdateOffset = 0;
 let telegramPolling = false;
+let lastDailyReportKey = "";
+const REPORT_TIME_ZONE = "Asia/Kolkata";
+const DAILY_REPORT_HOUR_IST = Math.max(0,Math.min(23,Number(process.env.DAILY_REPORT_HOUR_IST)||9));
+const DAILY_STATS_FILE = path.join(__dirname,"daily-report-state.json");
+let dailyDepthStats = {};
+let lastStatsWrite = 0;
 const telegramWebhookSecret = telegramToken ? crypto.createHash("sha256").update(telegramToken).digest("hex") : "";
+try{dailyDepthStats=JSON.parse(fs.readFileSync(DAILY_STATS_FILE,"utf8"))||{};}catch{}
 function json(res,status,body){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(body));}
 function readJson(req){return new Promise((resolve,reject)=>{let body="";req.on("data",chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on("end",()=>{try{resolve(JSON.parse(body||"{}"));}catch(error){reject(error);}});req.on("error",reject);});}
 async function telegram(req,res){
@@ -81,16 +88,21 @@ async function replyTelegram(message,chatId=telegramChatId){
   const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:chatId,text:message}),signal:AbortSignal.timeout(10000)});
   if(!upstream.ok){const result=await upstream.json().catch(()=>({}));throw new Error(result.description||"Telegram reply failed");}
 }
+async function broadcastTelegram(message){
+  if(!telegramToken||!telegramChatIds.length)return 0;
+  const results=await Promise.allSettled(telegramChatIds.map(chatId=>replyTelegram(message,chatId)));
+  return results.filter(result=>result.status==="fulfilled").length;
+}
 async function saveTelegramState(){
   if(!telegramToken)return;
-  const description=`LF Orderbook monitor. Shared v2: buy=${telegramBuyThreshold};sell=${telegramSellThreshold};total=${telegramTotalThreshold};muted=${telegramMuted?1:0}`;
+  const description=`LF Orderbook monitor. Shared v3: buy=${telegramBuyThreshold};sell=${telegramSellThreshold};total=${telegramTotalThreshold};muted=${telegramMuted?1:0};report=${lastDailyReportKey||"-"}`;
   const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/setMyDescription`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description}),signal:AbortSignal.timeout(10000)}),result=await upstream.json();
   if(!upstream.ok||!result.ok)throw new Error(result.description||"Could not save Telegram settings");
 }
 async function loadTelegramState(){
   if(!telegramToken)return;
-  try{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/getMyDescription`,{signal:AbortSignal.timeout(10000)}),result=await upstream.json(),description=result?.result?.description||"",match=description.match(/Shared v2: buy=([\d.]+);sell=([\d.]+);total=([\d.]+);muted=([01])/);
-    if(match){telegramBuyThreshold=Number(match[1])||telegramBuyThreshold;telegramSellThreshold=Number(match[2])||telegramSellThreshold;telegramTotalThreshold=Number(match[3])||telegramTotalThreshold;telegramMuted=match[4]==="1";return true;}
+  try{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/getMyDescription`,{signal:AbortSignal.timeout(10000)}),result=await upstream.json(),description=result?.result?.description||"",match=description.match(/Shared v(?:2|3): buy=([\d.]+);sell=([\d.]+);total=([\d.]+);muted=([01])(?:;report=([\d-]+|-))?/);
+    if(match){telegramBuyThreshold=Number(match[1])||telegramBuyThreshold;telegramSellThreshold=Number(match[2])||telegramSellThreshold;telegramTotalThreshold=Number(match[3])||telegramTotalThreshold;telegramMuted=match[4]==="1";lastDailyReportKey=match[5]&&match[5]!=="-"?match[5]:"";return true;}
   }catch(error){console.error("Telegram state:",error.message);}return false;
 }
 function sharedSettings(){return {buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold,muted:telegramMuted,adminProtected:!!settingsAdminToken};}
@@ -110,6 +122,61 @@ async function getDepthSnapshot(){
   const median=side=>{const values=depthSampleWindow.map(item=>item[side]).sort((a,b)=>a-b),middle=Math.floor(values.length/2);return values.length%2?values[middle]:(values[middle-1]+values[middle])/2;};
   const buy=median("buy"),sell=median("sell");
   return {buy,sell,total:buy+sell,bid,ask,lastTrade:reference};
+}
+function istDateKey(date=new Date()){
+  return new Intl.DateTimeFormat("en-CA",{timeZone:REPORT_TIME_ZONE,year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
+}
+function istClock(date=new Date()){
+  const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:REPORT_TIME_ZONE,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(date).filter(part=>part.type!=="literal").map(part=>[part.type,part.value]));
+  return {hour:Number(parts.hour),minute:Number(parts.minute)};
+}
+function dayRangeIst(key){
+  const [year,month,day]=key.split("-").map(Number),start=Date.UTC(year,month-1,day)-19800000;
+  return {start,end:start+86400000};
+}
+function updateRange(stats,name,value){
+  if(!Number.isFinite(value))return;
+  stats[`${name}Min`]=stats[`${name}Min`]==null?value:Math.min(stats[`${name}Min`],value);
+  stats[`${name}Max`]=stats[`${name}Max`]==null?value:Math.max(stats[`${name}Max`],value);
+}
+function recordDailyDepth(depth,book){
+  const key=istDateKey(),stats=dailyDepthStats[key]||{samples:0,spreadSum:0,spreadSamples:0,buyMin:null,buyMax:null,sellMin:null,sellMax:null,totalMin:null,totalMax:null,largestBid:null,largestAsk:null};
+  stats.samples++;updateRange(stats,"buy",depth.buy);updateRange(stats,"sell",depth.sell);updateRange(stats,"total",depth.total);
+  const mid=(depth.bid+depth.ask)/2,spreadPct=mid>0?(depth.ask-depth.bid)/mid*100:NaN;
+  if(Number.isFinite(spreadPct)){stats.spreadSum+=spreadPct;stats.spreadSamples++;}
+  const largest=(levels,side)=>{for(const level of levels||[]){const price=Number(level[0]),qty=Number(level[1]),value=price*qty;if(Number.isFinite(value)&&(!stats[side]||value>stats[side].value))stats[side]={price,qty,value,time:Date.now()};}};
+  largest(book?.bids,"largestBid");largest(book?.asks,"largestAsk");dailyDepthStats[key]=stats;
+  const keep=new Set([key,istDateKey(new Date(Date.now()-86400000*2)),istDateKey(new Date(Date.now()-86400000))]);for(const oldKey of Object.keys(dailyDepthStats))if(!keep.has(oldKey))delete dailyDepthStats[oldKey];
+  if(Date.now()-lastStatsWrite>60000){lastStatsWrite=Date.now();fs.writeFile(DAILY_STATS_FILE,JSON.stringify(dailyDepthStats),()=>{});}
+}
+async function getTradesForRange(startMs,endMs){
+  const trades=[],seen=new Set(),from=Math.floor(startMs/1000),to=Math.floor((endMs-1)/1000);let truncated=false;
+  for(let page=1;page<=100;page++){
+    const url=`https://api.gateio.ws/api/v4/spot/trades?currency_pair=LF_USDT&limit=1000&page=${page}&from=${from}&to=${to}`;
+    const upstream=await fetch(url,{headers:API_HEADERS,signal:AbortSignal.timeout(10000)}),batch=await upstream.json();
+    if(!upstream.ok||!Array.isArray(batch))throw new Error("Gate.io trade history is unavailable");
+    for(const trade of batch){const id=String(trade.id||`${trade.create_time_ms}-${trade.side}-${trade.price}-${trade.amount}`);if(seen.has(id))continue;seen.add(id);const timestamp=Number(trade.create_time_ms)||Number(trade.create_time)*1000;if(timestamp>=startMs&&timestamp<endMs)trades.push({id,price:Number(trade.price)||0,amount:Number(trade.amount)||0,side:String(trade.side||""),timestamp});}
+    if(batch.length<1000)break;if(page===100)truncated=true;
+  }
+  return {trades,truncated};
+}
+function formatDuration(ms){
+  const minutes=Math.max(0,Math.round(ms/60000));return minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}m`:`${minutes}m`;
+}
+function formatWall(wall){return wall?`${wall.value.toFixed(2)} USDT (${wall.qty.toFixed(2)} LF @ ${wall.price.toFixed(10)})`:"No sample";}
+async function buildDailyReport(key,endOverride){
+  const range=dayRangeIst(key),end=Math.min(endOverride||range.end,range.end),{trades,truncated}=await getTradesForRange(range.start,end),stats=dailyDepthStats[key];trades.sort((a,b)=>a.timestamp-b.timestamp);
+  let lfVolume=0,usdtVolume=0,largestBuy=null,largestSell=null;for(const trade of trades){const value=trade.price*trade.amount;lfVolume+=trade.amount;usdtVolume+=value;const target=trade.side==="buy"?"largestBuy":trade.side==="sell"?"largestSell":null;if(target&&(!({largestBuy,largestSell})[target]||value>({largestBuy,largestSell})[target].value)){const item={...trade,value};if(target==="largestBuy")largestBuy=item;else largestSell=item;}}
+  const points=[range.start,...trades.map(trade=>trade.timestamp),end],gaps=[];for(let i=1;i<points.length;i++){const gap=points[i]-points[i-1];if(gap>=120000)gaps.push(gap);}const longest=gaps.length?Math.max(...gaps):0;
+  const rangeText=name=>stats&&stats[`${name}Min`]!=null?`${stats[`${name}Min`].toFixed(2)} / ${stats[`${name}Max`].toFixed(2)} USDT`:"No server samples";
+  const tradeText=trade=>trade?`${trade.value.toFixed(2)} USDT (${trade.amount.toFixed(2)} LF @ ${trade.price.toFixed(10)})`:"No trade";
+  return `📅 LF/USDT DAILY REPORT\nDate: ${key} · India time${end<range.end?" · Today so far":""}\n\n📊 DEPTH ±2% — MIN / MAX\nBuy: ${rangeText("buy")}\nSell: ${rangeText("sell")}\nTotal: ${rangeText("total")}\nAverage spread: ${stats?.spreadSamples?(stats.spreadSum/stats.spreadSamples).toFixed(3)+"%":"No server samples"}\nDepth samples: ${stats?.samples||0}\n\n💱 COMPLETED TRADES\nTrade count: ${trades.length}${truncated?"+ (API limit reached)":""}\nVolume: ${lfVolume.toFixed(2)} LF / ${usdtVolume.toFixed(2)} USDT\nInactivity periods (≥2m): ${gaps.length}\nLongest inactivity: ${formatDuration(longest)}\n\n🐋 LARGEST COMPLETED TRADES\nBuy: ${tradeText(largestBuy)}\nSell: ${tradeText(largestSell)}\n\n📚 LARGEST OBSERVED BOOK ORDERS\nBid: ${formatWall(stats?.largestBid)}\nAsk: ${formatWall(stats?.largestAsk)}`;
+}
+async function maybeSendDailyReport(){
+  if(!telegramToken||!telegramChatIds.length)return;const now=new Date(),clock=istClock(now);if(clock.hour<DAILY_REPORT_HOUR_IST)return;
+  const key=istDateKey(new Date(now.getTime()-86400000));if(lastDailyReportKey===key)return;
+  try{const report=await buildDailyReport(key),sent=await broadcastTelegram(report);if(sent){lastDailyReportKey=key;await saveTelegramState();}}
+  catch(error){console.error("Daily Telegram report:",error.message);}
 }
 async function getRawOrderbook(){
   const now=Date.now();
@@ -225,7 +292,11 @@ async function handleTelegramCommand(text){
     }
     return "⚙️ Set depth commands\n/setbuy 400\n/setsell 300\n/settotal 700\n/setdepth 400 300 700\n/setdepth buy 400";
   }
-  if(command==="/settings")return `⚙️ LF/USDT alert settings\nBuy minimum: ${telegramBuyThreshold.toFixed(2)} USDT\nSell minimum: ${telegramSellThreshold.toFixed(2)} USDT\nTotal minimum: ${telegramTotalThreshold.toFixed(2)} USDT\nDepth range: ±2% from last trade price\nRepeat interval: 1 minute\nAlerts: ${telegramMuted?"Muted":"Active"}`;
+  if(command==="/settings")return `⚙️ LF/USDT alert settings\nBuy minimum: ${telegramBuyThreshold.toFixed(2)} USDT\nSell minimum: ${telegramSellThreshold.toFixed(2)} USDT\nTotal minimum: ${telegramTotalThreshold.toFixed(2)} USDT\nDepth range: ±2% from last trade price\nRepeat interval: 1 minute\nAlerts: ${telegramMuted?"Muted":"Active"}\nDaily report: ${String(DAILY_REPORT_HOUR_IST).padStart(2,"0")}:00 India time`;
+  if(command==="/report"){
+    const requested=(args[0]||"today").toLowerCase(),date=requested==="yesterday"?new Date(Date.now()-86400000):new Date(),key=istDateKey(date),range=dayRangeIst(key);
+    return buildDailyReport(key,requested==="yesterday"?range.end:Date.now());
+  }
   if(command==="/price"){
     const [depth,dex]=await Promise.all([getDepthSnapshot(),getDexPrice()]),difference=depth.lastTrade?(dex.price-depth.lastTrade)/depth.lastTrade*100:0;
     return `💱 LF/USDT prices\nDEX price: ${dex.price.toFixed(10)} USDT\nLast trade: ${depth.lastTrade.toFixed(10)} USDT\nDifference: ${difference>=0?"+":""}${difference.toFixed(2)}%\nSource: ${dex.source}`;
@@ -268,7 +339,7 @@ async function pollTelegramCommands(){
 }
 async function registerTelegramCommands(){
   if(!telegramToken)return;
-  try{await fetch(`https://api.telegram.org/bot${telegramToken}/setMyCommands`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({commands:[{command:"status",description:"Check monitor health"},{command:"depth",description:"Show ±2% depth totals"},{command:"price",description:"Show DEX and orderbook mid prices"},{command:"orderbook",description:"Show buy and sell orders"},{command:"buybook",description:"Show buy-side orders"},{command:"sellbook",description:"Show sell-side orders"},{command:"setdepth",description:"Change depth targets"},{command:"setbuy",description:"Set buy minimum"},{command:"setsell",description:"Set sell minimum"},{command:"settotal",description:"Set total minimum"},{command:"mute",description:"Mute or resume alerts"},{command:"settings",description:"Show alert settings"}]}),signal:AbortSignal.timeout(10000)});}catch(error){console.error("Telegram command setup:",error.message);}
+  try{await fetch(`https://api.telegram.org/bot${telegramToken}/setMyCommands`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({commands:[{command:"status",description:"Check monitor health"},{command:"depth",description:"Show ±2% depth totals"},{command:"price",description:"Show DEX and last trade prices"},{command:"orderbook",description:"Show buy and sell orders"},{command:"buybook",description:"Show buy-side orders"},{command:"sellbook",description:"Show sell-side orders"},{command:"report",description:"Show today's daily report"},{command:"setdepth",description:"Change depth targets"},{command:"setbuy",description:"Set buy minimum"},{command:"setsell",description:"Set sell minimum"},{command:"settotal",description:"Set total minimum"},{command:"mute",description:"Mute or resume alerts"},{command:"settings",description:"Show alert settings"}]}),signal:AbortSignal.timeout(10000)});}catch(error){console.error("Telegram command setup:",error.message);}
 }
 async function configureTelegramWebhook(){
   if(!telegramToken)return false;
@@ -279,7 +350,7 @@ async function configureTelegramWebhook(){
 }
 async function monitorDepth(){
   if(!telegramToken)return;
-  try{const depths=await getDepthSnapshot(),limits={buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold};
+  try{const depths=await getDepthSnapshot(),limits={buy:telegramBuyThreshold,sell:telegramSellThreshold,total:telegramTotalThreshold};recordDailyDepth(depths,orderbookCache.book);
     for(const side of ["buy","sell","total"]){const low=depths[side]<limits[side],now=Date.now();if(low&&!telegramLowSince.has(side))telegramLowSince.set(side,now);if(!low)telegramLowSince.delete(side);if(low&&now-(telegramLowSince.get(side)||now)>=CONFIRM_LOW_MS)await sendTelegramMessage(`🚨 LF/USDT ${side.toUpperCase()} depth alert\nCurrent: ${depths[side].toFixed(2)} USDT\nMinimum: ${limits[side].toFixed(2)} USDT\nLow continuously for 60 seconds · Range: 2% from last trade price`,side);}
   }catch(error){console.error("Telegram monitor:",error.message);}
 }
@@ -340,6 +411,6 @@ function bootstrapCore(){
   return coreBootstrapPromise;
 }
 
-if(require.main===module)server.listen(port,host,async()=>{console.log(`LF Orderbook running on ${host}:${port}`);setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const webhookActive=await bootstrapCore();monitorDepth();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);});
+if(require.main===module)server.listen(port,host,async()=>{console.log(`LF Orderbook running on ${host}:${port}`);setInterval(()=>refreshOrderbook().catch(()=>{}),750);setInterval(()=>getLastTrade().catch(()=>{}),1000);const webhookActive=await bootstrapCore();monitorDepth();maybeSendDailyReport();if(!webhookActive){pollTelegramCommands();setInterval(pollTelegramCommands,3000);}setInterval(monitorDepth,15000);setInterval(maybeSendDailyReport,60000);});
 
 module.exports={requestHandler};
