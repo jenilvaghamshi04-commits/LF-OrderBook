@@ -117,7 +117,12 @@ async function testnetSigned(method,endpoint,query="",body=""){
   const url=`${GATE_TESTNET_BASE}${endpoint}${query?`?${query}`:""}`;
   const response=await fetch(url,{method,headers:{...API_HEADERS,Accept:"application/json","Content-Type":"application/json","KEY":key,"Timestamp":timestamp,"SIGN":sign},body:body||undefined,signal:AbortSignal.timeout(8000)});
   const result=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(String(result.message||result.label||result.detail||`Gate Testnet returned HTTP ${response.status}`).slice(0,240));
+  if(!response.ok){
+    const label=String(result.label||"");
+    if(label==="POC_FILL_IMMEDIATELY")throw new Error("Gate Testnet cancelled this post-only order because it would execute immediately. Adjust the buy/sell offset so the limit price stays behind the Testnet best bid/ask, then try again.");
+    if(label==="INVALID_CURRENCY_PAIR")throw new Error("Gate Testnet rejected LF_USDT as an invalid currency pair. This pair is not enabled for this Testnet account, so no order was opened.");
+    throw new Error(String(result.message||label||result.detail||`Gate Testnet returned HTTP ${response.status}`).slice(0,240));
+  }
   return result;
 }
 async function liquidityTestnetStatus(req,res){
@@ -128,7 +133,7 @@ async function liquidityTestnetStatus(req,res){
 async function liquidityTestnetBook(req,res){
   if(req.method!=="GET")return json(res,405,{message:"Method not allowed"});
   try{const book=await testnetPublic(`/spot/order_book?currency_pair=${GATE_TESTNET_PAIR}&limit=50&with_id=true`);return json(res,200,{bids:book.bids||[],asks:book.asks||[],update:Number(book.current)||Date.now(),id:book.id||null});}
-  catch(error){return json(res,502,{message:error.message||"Gate Testnet book unavailable"});}
+  catch(error){const detail=String(error.message||"Gate Testnet book unavailable");return json(res,502,{message:detail.toLowerCase().includes("invalid currency pair")?"Gate Testnet does not provide an order book for LF_USDT on this endpoint (invalid currency pair). This public-book limitation is separate from your private order credentials.":detail});}
 }
 async function liquidityTestnetPrivate(req,res,placeOrders=false){
   if(req.method!=="POST")return json(res,405,{message:"Method not allowed"});
