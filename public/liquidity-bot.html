@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#060806">
+  <meta name="description" content="LF liquidity bot dry-run simulator">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/liquidity-bot.css?v=1">
+  <title>LF Liquidity Bot Test</title>
+</head>
+<body>
+<main>
+  <header class="topbar">
+    <a class="back" href="/">← Order book</a>
+    <div class="brand"><span>LF</span><div><strong>Liquidity Bot</strong><small>DEX-referenced order simulator</small></div></div>
+    <div id="modeBadge" class="mode"><i></i> DRY RUN</div>
+  </header>
+  <section class="hero">
+    <div><span class="eyebrow">SAFE TESTING MODE</span><h1>Test Gate.io depth orders from the live pool price</h1><p>This page calculates proposed buy and sell orders only. It cannot access your account or place real orders.</p></div>
+    <div class="feed"><small>LIVE POOL PRICE</small><strong id="poolPrice">—</strong><span id="poolSource">Connecting to LF/WETH pool…</span></div>
+  </section>
+  <section class="layout">
+    <form id="settings" class="panel settings">
+      <header><div><small>SIMULATION SETTINGS</small><h2>Order configuration</h2></div><span>Saved locally</span></header>
+      <div class="fields">
+        <label><span>Buying order amount</span><div><input id="buyAmount" type="number" min="1" step="1" value="500" required><b>USDT</b></div></label>
+        <label><span>Selling order amount</span><div><input id="sellAmount" type="number" min="1" step="1" value="500" required><b>USDT</b></div></label>
+        <label><span>Buy below pool price</span><div><input id="buyPercent" type="number" min="0.01" max="20" step="0.01" value="1.95" required><b>%</b></div></label>
+        <label><span>Sell above pool price</span><div><input id="sellPercent" type="number" min="0.01" max="20" step="0.01" value="1.95" required><b>%</b></div></label>
+        <label class="full"><span>Check live pool every</span><div><input id="intervalSeconds" type="number" min="1" max="300" step="1" value="10" required><b>SECONDS</b></div><small>The live pool provider may return a cached price for several seconds.</small></label>
+      </div>
+      <div class="actions"><button id="startBtn" class="primary" type="submit">▶ Start testing</button><button id="pauseBtn" type="button" disabled>Pause</button><button id="checkBtn" type="button">Check now</button></div>
+      <div class="safety"><b>🔒 No API keys connected</b><span>Every displayed order is simulated. Live trading will require a separate protected server worker.</span></div>
+    </form>
+    <section class="panel output">
+      <header><div><small>PROPOSED ORDERS</small><h2>Current test calculation</h2></div><span id="status">Ready</span></header>
+      <div class="orders">
+        <article class="buy"><div><span>BUY LIMIT</span><b>−<em id="buyPercentView">1.95</em>%</b></div><strong id="buyPrice">—</strong><dl><div><dt>Order value</dt><dd id="buyValue">500.00 USDT</dd></div><div><dt>LF quantity</dt><dd id="buyQuantity">—</dd></div></dl></article>
+        <article class="sell"><div><span>SELL LIMIT</span><b>+<em id="sellPercentView">1.95</em>%</b></div><strong id="sellPrice">—</strong><dl><div><dt>Order value</dt><dd id="sellValue">500.00 USDT</dd></div><div><dt>LF quantity</dt><dd id="sellQuantity">—</dd></div></dl></article>
+      </div>
+      <div class="monitor"><span><small>BOT STATUS</small><b id="botState">Stopped</b></span><span><small>LAST CHECK</small><b id="lastCheck">—</b></span><span><small>NEXT CHECK</small><b id="nextCheck">—</b></span><span><small>CHECK COUNT</small><b id="checkCount">0</b></span></div>
+    </section>
+  </section>
+  <section class="panel log-panel">
+    <header><div><small>TEST ACTIVITY</small><h2>Simulated order history</h2></div><button id="clearBtn" type="button">Clear</button></header>
+    <div class="table-head"><span>Time</span><span>Pool price</span><span>Buy price / quantity</span><span>Sell price / quantity</span><span>Result</span></div>
+    <div id="activity" class="activity"><div class="empty">Start testing to record simulated order calculations.</div></div>
+  </section>
+</main>
+<script src="/liquidity-bot.js?v=1" defer></script>
+</body>
+</html>
