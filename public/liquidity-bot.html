@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#060806">
   <meta name="description" content="LF liquidity bot dry-run simulator">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/liquidity-bot.css?v=1">
+  <link rel="stylesheet" href="/liquidity-bot.css?v=2">
   <title>LF Liquidity Bot Test</title>
 </head>
 <body>
@@ -42,12 +42,29 @@
       <div class="monitor"><span><small>BOT STATUS</small><b id="botState">Stopped</b></span><span><small>LAST CHECK</small><b id="lastCheck">—</b></span><span><small>NEXT CHECK</small><b id="nextCheck">—</b></span><span><small>CHECK COUNT</small><b id="checkCount">0</b></span></div>
     </section>
   </section>
+  <section class="panel book-panel">
+    <header>
+      <div><small>GATE.IO · LF/USDT</small><h2>Live public order book</h2></div>
+      <span class="book-status" id="bookStatus"><i></i> Connecting…</span>
+    </header>
+    <div class="book-note"><b>Market orders shown below are real public book levels.</b> Your calculated buy/sell targets are simulation-only and are not submitted to Gate.io.</div>
+    <div class="book-targets">
+      <div class="target buy-target"><span><i></i> SIM BUY TARGET · NOT SENT</span><b id="bookBuyTarget">—</b><small id="bookBuyPosition">Waiting for price calculation</small></div>
+      <div class="target sell-target"><span><i></i> SIM SELL TARGET · NOT SENT</span><b id="bookSellTarget">—</b><small id="bookSellPosition">Waiting for price calculation</small></div>
+    </div>
+    <div class="book-summary"><span>Best bid <b id="bestBid">—</b></span><span>Best ask <b id="bestAsk">—</b></span><span>Spread <b id="bookSpread">—</b></span><span>Updated <b id="bookUpdated">—</b></span></div>
+    <div class="book-columns">
+      <div class="book-side asks-side"><h3><i></i> Asks <small>(sell orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="asks" class="book-rows"><div class="book-empty">Loading asks…</div></div></div>
+      <div class="book-side bids-side"><h3><i></i> Bids <small>(buy orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="bids" class="book-rows"><div class="book-empty">Loading bids…</div></div></div>
+    </div>
+    <div class="book-footnote">Public aggregated market depth only. Private account orders and confirmations are not available in dry-run mode.</div>
+  </section>
   <section class="panel log-panel">
     <header><div><small>TEST ACTIVITY</small><h2>Simulated order history</h2></div><button id="clearBtn" type="button">Clear</button></header>
     <div class="table-head"><span>Time</span><span>Pool price</span><span>Buy price / quantity</span><span>Sell price / quantity</span><span>Result</span></div>
     <div id="activity" class="activity"><div class="empty">Start testing to record simulated order calculations.</div></div>
   </section>
 </main>
-<script src="/liquidity-bot.js?v=1" defer></script>
+<script src="/liquidity-bot.js?v=2" defer></script>
 </body>
 </html>
