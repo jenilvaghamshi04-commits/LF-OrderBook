@@ -14,9 +14,3 @@ services:
         value: "400"
       - key: TELEGRAM_SELL_THRESHOLD
         value: "400"
-      - key: GATE_TESTNET_API_KEY
-        sync: false
-      - key: GATE_TESTNET_API_SECRET
-        sync: false
-      - key: LIQUIDITY_TESTNET_PIN
-        sync: false

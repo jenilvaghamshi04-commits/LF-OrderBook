@@ -6,18 +6,18 @@
   <meta name="theme-color" content="#060806">
   <meta name="description" content="LF liquidity bot dry-run simulator">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/liquidity-bot.css?v=3">
+  <link rel="stylesheet" href="/liquidity-bot.css?v=5">
   <title>LF Liquidity Bot Test</title>
 </head>
 <body>
 <main>
   <header class="topbar">
     <a class="back" href="/">← Order book</a>
-    <div class="brand"><span>LF</span><div><strong>Liquidity Bot</strong><small>Testnet order monitor</small></div></div>
-    <div id="modeBadge" class="mode"><i></i> TESTNET ONLY</div>
+    <div class="brand"><span>LF</span><div><strong>Liquidity Bot</strong><small>Paper-trading order monitor</small></div></div>
+    <div id="modeBadge" class="mode"><i></i> SIMULATION</div>
   </header>
   <section class="hero">
-    <div><span class="eyebrow">GATE.IO TESTNET · NO MAINNET ORDERS</span><h1>Preview and verify your depth orders</h1><p>Set buy/sell USDT amounts and offsets, then explicitly submit post-only limit orders to Gate.io Testnet. Your private Testnet orders appear separately from the public market book.</p></div>
+    <div><span class="eyebrow">LOCAL PAPER TRADING · NO EXCHANGE ORDER API</span><h1>Preview and test your depth orders</h1><p>Set buy/sell USDT amounts and offsets, then create simulated limit orders. They appear in this browser’s simulated book and stay open until you cancel them. No exchange order is sent.</p></div>
     <div class="feed"><small>LIVE POOL PRICE</small><strong id="poolPrice">—</strong><span id="poolSource">Connecting to LF/WETH pool…</span></div>
   </section>
   <section class="layout">
@@ -31,7 +31,7 @@
         <label class="full"><span>Check live pool every</span><div><input id="intervalSeconds" type="number" min="1" max="300" step="1" value="10" required><b>SECONDS</b></div><small>The live pool provider may return a cached price for several seconds.</small></label>
       </div>
       <div class="actions"><button id="startBtn" class="primary" type="submit">▶ Start testing</button><button id="pauseBtn" type="button" disabled>Pause</button><button id="checkBtn" type="button">Check now</button></div>
-      <div class="safety"><b>🔒 Calculations never submit orders automatically</b><span>Changing settings or pressing Start/Check only updates the preview. A separate Testnet order button and confirmation are required.</span></div>
+      <div class="safety"><b>🔒 Calculations never submit orders automatically</b><span>All buy/sell actions in this page create local paper orders only. Nothing is sent to an exchange.</span></div>
     </form>
     <section class="panel output">
       <header><div><small>PROPOSED ORDERS</small><h2>Current test calculation</h2></div><span id="status">Ready</span></header>
@@ -44,10 +44,10 @@
   </section>
   <section class="panel book-panel">
     <header>
-      <div><small>GATE.IO MAINNET PUBLIC MARKET · LF/USDT</small><h2>Live public order book</h2></div>
+      <div><small>PUBLIC MARKET REFERENCE · LF/USDT</small><h2>Live public order book</h2></div>
       <span class="book-status" id="bookStatus"><i></i> Connecting…</span>
     </header>
-    <div class="book-note"><b>Market orders shown below are real public Gate.io mainnet levels.</b> This is separate from Testnet; your personal sandbox orders can only appear in your Testnet account and the Testnet panel below.</div>
+    <div class="book-note"><b>Reference market data</b> Public Gate.io prices and order-book levels help you check the simulated limit prices. Your paper orders are kept separate below.</div>
     <div class="book-targets">
       <div class="target buy-target"><span><i></i> BUY TARGET PREVIEW · NOT SENT</span><b id="bookBuyTarget">—</b><small id="bookBuyPosition">Waiting for price calculation</small></div>
       <div class="target sell-target"><span><i></i> SELL TARGET PREVIEW · NOT SENT</span><b id="bookSellTarget">—</b><small id="bookSellPosition">Waiting for price calculation</small></div>
@@ -57,26 +57,25 @@
       <div class="book-side asks-side"><h3><i></i> Asks <small>(sell orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="asks" class="book-rows"><div class="book-empty">Loading asks…</div></div></div>
       <div class="book-side bids-side"><h3><i></i> Bids <small>(buy orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="bids" class="book-rows"><div class="book-empty">Loading bids…</div></div></div>
     </div>
-    <div class="book-footnote">Public aggregated Gate.io market depth. Private Testnet orders are shown in the Testnet account panel below.</div>
+    <div class="book-footnote">Public market data is read-only reference data. Simulated orders are local only and never reach Gate.io.</div>
   </section>
-  <section class="panel testnet-panel">
-    <header><div><small>ISOLATED SANDBOX · GATE.IO TESTNET</small><h2>Submit and verify your Testnet orders</h2></div><span id="testnetStatus" class="testnet-status">Checking configuration…</span></header>
-    <div class="testnet-warning"><b>Testnet only. These are not real-money orders.</b> Server routing is hard-pinned to Gate.io Testnet; production API hosts are not accepted. Use a dedicated Testnet API key, never your production key.</div>
-    <div class="testnet-submit">
-      <label class="pin-field"><span>Testnet confirmation PIN</span><input id="testnetPin" type="password" autocomplete="off" inputmode="text" placeholder="Enter PIN configured in Render"></label>
-      <div class="testnet-review"><span>Buy <b id="testBuyPreview">—</b></span><span>Sell <b id="testSellPreview">—</b></span></div>
-      <div class="testnet-actions"><button id="placeBuy" class="buy-button" type="button" disabled>Place buy on Testnet</button><button id="placeSell" class="sell-button" type="button" disabled>Place sell on Testnet</button><button id="placeBoth" class="place-both" type="button" disabled>Place both on Testnet</button><button id="refreshOwnOrders" type="button">Refresh my orders</button></div>
-      <p id="testnetMessage" class="testnet-message" role="status">Orders are never sent on a timer. Review price and amount, then submit explicitly.</p>
+  <section class="panel simulation-panel">
+    <header><div><small>LOCAL SIMULATION · NO EXCHANGE CREDENTIALS</small><h2>Create and verify simulated orders</h2></div><span id="simulationStatus" class="simulation-status">Simulation ready</span></header>
+    <div class="simulation-warning"><b>Simulation only — no money and no exchange account.</b> Orders are saved in this browser, appear only in the simulated book below, and stay open until you cancel them. Public prices above are reference data; the app does not send orders to Gate.io.</div>
+    <div class="simulation-submit">
+      <div class="simulation-review"><span>Buy paper order <b id="testBuyPreview">—</b></span><span>Sell paper order <b id="testSellPreview">—</b></span></div>
+      <div class="simulation-actions"><button id="placeBuy" class="buy-button" type="button">Simulate buy</button><button id="placeSell" class="sell-button" type="button">Simulate sell</button><button id="placeBoth" class="place-both" type="button">Simulate both</button><button id="clearSimOrders" type="button">Clear open orders</button></div>
+      <p id="simulationMessage" class="simulation-message" role="status">Ready. Create a paper order to test the order preview, book, and cancel flow.</p>
     </div>
-    <div id="submissionReceipts" class="receipts"><div class="empty">No Testnet submission in this session.</div></div>
-    <div class="testnet-books">
-      <div class="book-side"><h3><i class="test-dot"></i> Gate Testnet asks <small>(sell side)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="testnetAsks" class="book-rows"><div class="book-empty">Connecting to Testnet book…</div></div></div>
-      <div class="book-side"><h3><i class="test-dot"></i> Gate Testnet bids <small>(buy side)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="testnetBids" class="book-rows"><div class="book-empty">Connecting to Testnet book…</div></div></div>
+    <div id="submissionReceipts" class="receipts"><div class="empty">No simulated orders yet.</div></div>
+    <div class="simulation-books">
+      <div class="book-side"><h3><i class="simulation-dot"></i> Simulated asks <small>(your sell orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="simAsks" class="book-rows"><div class="book-empty">No simulated sell orders yet</div></div></div>
+      <div class="book-side"><h3><i class="simulation-dot"></i> Simulated bids <small>(your buy orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="simBids" class="book-rows"><div class="book-empty">No simulated buy orders yet</div></div></div>
     </div>
-    <p class="testnet-book-note">A blue “YOU” marker appears at a price level when your open order matches it. The private open-order list above/below is the source of truth; the public book aggregates everyone at that price.</p>
-    <div class="own-orders">
-      <div class="own-orders-heading"><b>My open Testnet orders</b><span id="ownOrdersUpdated">Not loaded</span></div>
-      <div class="own-orders-table"><div class="own-orders-head"><span>Order ID</span><span>Side</span><span>Limit price</span><span>Original LF</span><span>Remaining LF</span><span>Status</span></div><div id="ownOrders" class="own-orders-rows"><div class="book-empty">Enter your PIN and refresh to view your private Testnet orders.</div></div></div>
+    <p class="simulation-book-note">These rows are generated from your simulated orders only. They do not represent exchange liquidity and do not execute or fill.</p>
+    <div class="sim-orders">
+      <div class="own-orders-heading"><b>My open simulated orders</b><span id="ownOrdersUpdated">Saved in this browser</span></div>
+      <div class="own-orders-table"><div class="own-orders-head"><span>Order ID</span><span>Side</span><span>Limit price</span><span>Value USDT</span><span>LF qty</span><span>Remaining</span><span>Status</span><span>Action</span></div><div id="ownOrders" class="own-orders-rows"><div class="book-empty">Create a simulated order to see it here.</div></div></div>
     </div>
   </section>
   <section class="panel log-panel">
@@ -85,6 +84,6 @@
     <div id="activity" class="activity"><div class="empty">Start testing to record simulated order calculations.</div></div>
   </section>
 </main>
-<script src="/liquidity-bot.js?v=3" defer></script>
+<script src="/liquidity-bot.js?v=5" defer></script>
 </body>
 </html>

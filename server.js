@@ -66,11 +66,6 @@ const DAILY_STATS_FILE = path.join(__dirname,"daily-report-state.json");
 let dailyDepthStats = {};
 let lastStatsWrite = 0;
 const telegramWebhookSecret = telegramToken ? crypto.createHash("sha256").update(telegramToken).digest("hex") : "";
-// This page is deliberately hard-pinned to Gate.io's Testnet. Never use production credentials here.
-const GATE_TESTNET_BASE = "https://api-testnet.gateapi.io/api/v4";
-const GATE_TESTNET_PAIR = "LF_USDT";
-const testnetRateLimit = new Map();
-const testnetIdempotency = new Map();
 try{dailyDepthStats=JSON.parse(fs.readFileSync(DAILY_STATS_FILE,"utf8"))||{};}catch{}
 function json(res,status,body){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(body));}
 function readJson(req){return new Promise((resolve,reject)=>{let body="";req.on("data",chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on("end",()=>{try{resolve(JSON.parse(body||"{}"));}catch(error){reject(error);}});req.on("error",reject);});}
@@ -85,97 +80,6 @@ async function telegram(req,res){
     const results=await Promise.all(telegramChatIds.map(async chatId=>{const upstream=await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id:chatId,text:message}),signal:AbortSignal.timeout(10000)}),result=await upstream.json();if(!upstream.ok||!result.ok)throw new Error(result.description||"Telegram request failed");return chatId;}));
     if(side!=="test")telegramCooldown.set(side,Date.now());return json(res,200,{sent:true,recipients:results.length});
   }catch(error){return json(res,502,{message:error.message||"Could not send Telegram alert"});}
-}
-
-function testnetConfigured(){return Boolean(process.env.GATE_TESTNET_API_KEY&&process.env.GATE_TESTNET_API_SECRET&&process.env.LIQUIDITY_TESTNET_PIN);}
-function testnetPinValid(supplied){
-  const expected=String(process.env.LIQUIDITY_TESTNET_PIN||""),actual=String(supplied||"");
-  if(!expected||!actual)return false;
-  const a=Buffer.from(expected),b=Buffer.from(actual);
-  return a.length===b.length&&crypto.timingSafeEqual(a,b);
-}
-function testnetRateAllowed(req){
-  const ip=String(req.headers["x-forwarded-for"]||req.socket?.remoteAddress||"unknown").split(",")[0].trim();
-  const now=Date.now(),entry=testnetRateLimit.get(ip)||{start:now,count:0};
-  if(now-entry.start>60000){entry.start=now;entry.count=0;}
-  entry.count++;testnetRateLimit.set(ip,entry);
-  if(testnetRateLimit.size>5000)for(const [key,value] of testnetRateLimit)if(now-value.start>120000)testnetRateLimit.delete(key);
-  return entry.count<=10;
-}
-async function testnetPublic(path){
-  const response=await fetch(`${GATE_TESTNET_BASE}${path}`,{headers:API_HEADERS,signal:AbortSignal.timeout(5000)});
-  const result=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(String(result.message||result.label||`Gate Testnet returned HTTP ${response.status}`).slice(0,220));
-  return result;
-}
-async function testnetSigned(method,endpoint,query="",body=""){
-  const key=process.env.GATE_TESTNET_API_KEY,secret=process.env.GATE_TESTNET_API_SECRET;
-  if(!key||!secret)throw new Error("Gate.io Testnet API key and secret are not configured on the server");
-  const timestamp=String(Math.floor(Date.now()/1000)),hashedBody=crypto.createHash("sha512").update(body).digest("hex");
-  const signText=`${method}\n/api/v4${endpoint}\n${query}\n${hashedBody}\n${timestamp}`;
-  const sign=crypto.createHmac("sha512",secret).update(signText).digest("hex");
-  const url=`${GATE_TESTNET_BASE}${endpoint}${query?`?${query}`:""}`;
-  const response=await fetch(url,{method,headers:{...API_HEADERS,Accept:"application/json","Content-Type":"application/json","KEY":key,"Timestamp":timestamp,"SIGN":sign},body:body||undefined,signal:AbortSignal.timeout(8000)});
-  const result=await response.json().catch(()=>({}));
-  if(!response.ok){
-    const label=String(result.label||"");
-    if(label==="POC_FILL_IMMEDIATELY")throw new Error("Gate Testnet cancelled this post-only order because it would execute immediately. Adjust the buy/sell offset so the limit price stays behind the Testnet best bid/ask, then try again.");
-    if(label==="INVALID_CURRENCY_PAIR")throw new Error("Gate Testnet rejected LF_USDT as an invalid currency pair. This pair is not enabled for this Testnet account, so no order was opened.");
-    throw new Error(String(result.message||label||result.detail||`Gate Testnet returned HTTP ${response.status}`).slice(0,240));
-  }
-  return result;
-}
-async function liquidityTestnetStatus(req,res){
-  if(req.method!=="GET")return json(res,405,{message:"Method not allowed"});
-  let pair=null,error="";try{pair=await testnetPublic(`/spot/currency_pairs/${GATE_TESTNET_PAIR}`);}catch(e){error=e.message;}
-  return json(res,200,{environment:"Gate.io Testnet only",configured:testnetConfigured(),apiKeyConfigured:Boolean(process.env.GATE_TESTNET_API_KEY&&process.env.GATE_TESTNET_API_SECRET),pinConfigured:Boolean(process.env.LIQUIDITY_TESTNET_PIN),pairAvailable:Boolean(pair),tradeStatus:pair?.trade_status||null,amountPrecision:Number(pair?.amount_precision),pricePrecision:Number(pair?.precision),minBaseAmount:pair?.min_base_amount||null,minQuoteAmount:pair?.min_quote_amount||null,message:pair?"Testnet pair available":error||"Testnet pair unavailable"});
-}
-async function liquidityTestnetBook(req,res){
-  if(req.method!=="GET")return json(res,405,{message:"Method not allowed"});
-  try{const book=await testnetPublic(`/spot/order_book?currency_pair=${GATE_TESTNET_PAIR}&limit=50&with_id=true`);return json(res,200,{bids:book.bids||[],asks:book.asks||[],update:Number(book.current)||Date.now(),id:book.id||null});}
-  catch(error){const detail=String(error.message||"Gate Testnet book unavailable");return json(res,502,{message:detail.toLowerCase().includes("invalid currency pair")?"Gate Testnet does not provide an order book for LF_USDT on this endpoint (invalid currency pair). This public-book limitation is separate from your private order credentials.":detail});}
-}
-async function liquidityTestnetPrivate(req,res,placeOrders=false){
-  if(req.method!=="POST")return json(res,405,{message:"Method not allowed"});
-  if(!testnetRateAllowed(req))return json(res,429,{message:"Too many Testnet requests. Wait one minute and try again."});
-  if(!testnetConfigured())return json(res,503,{message:"Configure GATE_TESTNET_API_KEY, GATE_TESTNET_API_SECRET, and LIQUIDITY_TESTNET_PIN in Render Environment first."});
-  try{
-    const data=await readJson(req);
-    if(!testnetPinValid(data.pin))return json(res,401,{message:"Testnet PIN is incorrect"});
-    if(data.action==="list"){
-      const query="currency_pair=LF_USDT&status=open&limit=100";
-      const orders=await testnetSigned("GET","/spot/orders",query);
-      return json(res,200,{orders:Array.isArray(orders)?orders.map(order=>({id:String(order.id||""),side:String(order.side||""),price:String(order.price||""),amount:String(order.amount||""),left:String(order.left||""),filledAmount:String(order.filled_amount||""),status:String(order.status||""),createdAt:Number(order.create_time_ms)||0})):[]});
-    }
-    if(!placeOrders)return json(res,400,{message:"Unknown Testnet action"});
-    const requestId=String(data.requestId||"");
-    if(!/^[\w-]{12,80}$/.test(requestId))return json(res,400,{message:"Missing valid request ID"});
-    const prior=testnetIdempotency.get(requestId);if(prior&&Date.now()-prior.time<300000)return json(res,200,{...prior.result,replayed:true});
-    const pair=await testnetPublic(`/spot/currency_pairs/${GATE_TESTNET_PAIR}`);
-    if(pair.trade_status!=="tradable"&&pair.trade_status!=="buyable"&&pair.trade_status!=="sellable")return json(res,409,{message:`LF/USDT is not tradable on Gate.io Testnet${pair.trade_status?`: ${pair.trade_status}`:""}. No order was sent.`});
-    const sides=["buy","sell"].filter(side=>data[side]&&data[side].enabled===true);
-    if(!sides.length)return json(res,400,{message:"Select at least one order side"});
-    const results=[];
-    for(const side of sides){
-      try{
-        const input=data[side],price=Number(input.price),quoteAmount=Number(input.quoteAmount);
-        if(!Number.isFinite(price)||price<=0||price>1000000||!Number.isFinite(quoteAmount)||quoteAmount<1||quoteAmount>5000)throw new Error("Price must be positive; each Testnet order value must be between 1 and 5,000 USDT");
-        if(side==="buy"&&pair.trade_status==="sellable")throw new Error("This Testnet pair is not currently buyable");
-        if(side==="sell"&&pair.trade_status==="buyable")throw new Error("This Testnet pair is not currently sellable");
-        const pricePrecision=Math.max(0,Math.min(12,Number(pair.precision)||0)),amountPrecision=Math.max(0,Math.min(12,Number(pair.amount_precision)||0));
-        const normalizedPrice=price.toFixed(pricePrecision),amount=(quoteAmount/Number(normalizedPrice)).toFixed(amountPrecision);
-        if(Number(amount)<=0)throw new Error("Calculated LF quantity is below the Testnet pair's amount precision");
-        if(pair.min_base_amount&&Number(amount)<Number(pair.min_base_amount))throw new Error(`Quantity is below Gate Testnet minimum of ${pair.min_base_amount} LF`);
-        if(pair.min_quote_amount&&Number(amount)*Number(normalizedPrice)<Number(pair.min_quote_amount))throw new Error(`Order value is below Gate Testnet minimum of ${pair.min_quote_amount} USDT`);
-        const body=JSON.stringify({currency_pair:GATE_TESTNET_PAIR,type:"limit",account:"spot",side,amount,price:normalizedPrice,time_in_force:"poc",text:`t-lf-${Date.now().toString(36)}-${side}`});
-        const order=await testnetSigned("POST","/spot/orders","",body);
-        results.push({side,ok:true,id:String(order.id||""),price:String(order.price||normalizedPrice),amount:String(order.amount||amount),left:String(order.left||order.amount||amount),status:String(order.status||"open"),timeInForce:"poc",quoteValue:(Number(order.amount||amount)*Number(order.price||normalizedPrice)).toFixed(4)});
-      }catch(error){results.push({side,ok:false,message:error.message||"Testnet order rejected"});}
-    }
-    const result={orders:results,environment:"Gate.io Testnet",pair:GATE_TESTNET_PAIR,postOnly:true};
-    testnetIdempotency.set(requestId,{time:Date.now(),result});if(testnetIdempotency.size>1000)for(const [key,value] of testnetIdempotency)if(Date.now()-value.time>300000)testnetIdempotency.delete(key);
-    return json(res,results.some(item=>item.ok)?200:502,result);
-  }catch(error){return json(res,502,{message:error.message||"Gate Testnet request failed"});}
 }
 
 async function sendTelegramMessage(message,side){
@@ -500,10 +404,6 @@ function healthApi(req,res){if(!["GET","HEAD"].includes(req.method))return json(
 
 const requestHandler = async (req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
-  if(pathname==="/api/liquidity-testnet/status")return liquidityTestnetStatus(req,res);
-  if(pathname==="/api/liquidity-testnet/book")return liquidityTestnetBook(req,res);
-  if(pathname==="/api/liquidity-testnet/orders")return liquidityTestnetPrivate(req,res,true);
-  if(pathname==="/api/liquidity-testnet/account")return liquidityTestnetPrivate(req,res,false);
   if (pathname === "/api/orderbook") return orderbook(res);
   if (pathname === "/api/dex-price") return dexPriceApi(res);
   if (pathname === "/api/last-trade") return lastTradeApi(res);

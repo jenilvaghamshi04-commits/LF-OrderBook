@@ -56,14 +56,8 @@ The website and Telegram use one server-side setting. Changing buy, sell, or tot
 - Live DEX buy/sell execution-average estimate using trade size and pool liquidity
 - WebSocket trade tape with rolling buy/sell value pressure
 - Live feed-latency and stale-data health indicator
-# Gate.io Testnet orders on the liquidity test page
+# Local paper-trading test page
 
-The `/liquidity-bot.html` page has a separate Gate.io Testnet panel. It never submits to Gate.io production: the Testnet API base URL is hard-coded server-side. The panel can show the Testnet public book and, after a PIN check, the account's own open LF/USDT orders.
+Open `/liquidity-bot.html` to test limit-price calculations and the simulated order workflow without Gate.io API keys or PINs. Buy/sell buttons create local paper orders, display them in the simulated book and open-order list, and allow cancellation. Orders are stored in that browser's local storage; they do not reach Gate.io, execute, or fill.
 
-To enable the private Testnet features on Render, create a dedicated Gate.io Testnet API key with only the permissions required for spot order placement and order reading. Add these variables under the Render service's Environment settings:
-
-- `GATE_TESTNET_API_KEY`
-- `GATE_TESTNET_API_SECRET`
-- `LIQUIDITY_TESTNET_PIN` (a long, unique confirmation phrase used only on this test page)
-
-Never use production API credentials here and never put API keys in the browser or source code. The PIN is not saved by the page. Calculations do not submit anything; each submission requires a button press and a confirmation prompt. Orders are post-only (`poc`) and may be rejected if they would immediately execute. Limit-order quantity is derived from the configured USDT amount and limit price, rounded to the Testnet pair's precision. A Testnet pair must exist and be tradable for placement to work. The panel shows the exchange-returned order ID/result and lets you refresh the private open-order list.
+The page still reads public DEX price and public Gate.io market data as read-only references. These public feeds are not private trading credentials.
