@@ -103,17 +103,6 @@ function historyState(item,previous){
     total:total<num(item.tt||thresholds.total)
   };
 }
-function sideHistoryData(side,cut){
-  const key=side==="buy"?"b":"s",events=[];
-  let state={buy:false,sell:false,total:false};
-  for(const item of [...history].sort((a,b)=>a.t-b.t)){
-    const next=historyState(item,state);
-    if(item.t>=cut&&next[side]&&!state[side])events.push(item);
-    state=next;
-  }
-  return events;
-}
-function drawSideChart(side,mins,cut){const key=side==="buy"?"b":"s",target=thresholds[side],canvas=$(side+"DepthChart"),empty=$(side+"ChartEmpty"),data=sideHistoryData(side,cut),ctx=canvas.getContext("2d"),box=canvas.getBoundingClientRect(),ratio=devicePixelRatio||1;canvas.width=Math.max(1,box.width*ratio);canvas.height=Math.max(1,box.height*ratio);ctx.scale(ratio,ratio);const w=box.width,h=box.height,p={l:45,r:12,t:14,b:24};ctx.clearRect(0,0,w,h);empty.classList.toggle("hidden",data.length>0);if(!data.length)return;const max=Math.max(target,...data.map(item=>num(item[key])),1)*1.12,x=t=>p.l+(t-cut)/(Date.now()-cut)*(w-p.l-p.r),y=v=>p.t+(1-v/max)*(h-p.t-p.b),color=side==="buy"?"#22c55e":"#ef4444";ctx.font="9px system-ui";ctx.fillStyle="#77857d";ctx.strokeStyle="#1a211d";ctx.lineWidth=1;for(let i=0;i<=3;i++){const yy=p.t+i*(h-p.t-p.b)/3,value=max*(1-i/3);ctx.beginPath();ctx.moveTo(p.l,yy);ctx.lineTo(w-p.r,yy);ctx.stroke();ctx.fillText(value>=1000?`${(value/1000).toFixed(1)}k`:value.toFixed(0),3,yy+3);}ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle="#f59e0b";ctx.beginPath();ctx.moveTo(p.l,y(target));ctx.lineTo(w-p.r,y(target));ctx.stroke();ctx.restore();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();data.forEach((item,index)=>index?ctx.lineTo(x(item.t),y(num(item[key]))):ctx.moveTo(x(item.t),y(num(item[key]))));if(data.length>1)ctx.stroke();for(const item of data){ctx.beginPath();ctx.arc(x(item.t),y(num(item[key])),3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}ctx.fillStyle="#77857d";ctx.fillText(`−${mins}m`,p.l,h-6);ctx.fillText("now",w-p.r-20,h-6);}
 function timedHistoryData(cut){
   const intervals=[],open={buy:null,sell:null,total:null};
   let state={buy:false,sell:false,total:false};
@@ -141,17 +130,15 @@ function durationLabel(ms){
   return `${seconds}s`;
 }
 function renderTimedHistory(data){
-  const html=data.slice(0,60).map(item=>{
+  const html=data.map(item=>{
     const start=new Date(item.start),end=item.end?new Date(item.end):null,label=item.side==="buy"?"BUY LOW":item.side==="sell"?"SELL LOW":"TOTAL LOW";
     const time=`${start.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})} → ${end?end.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"NOW"}`;
     const dates=end&&end.toLocaleDateString()!==start.toLocaleDateString()?`${start.toLocaleDateString()} → ${end.toLocaleDateString()}`:start.toLocaleDateString();
     return `<div class="timed-history-row"><time><b>${time}</b><small>${dates} · ${durationLabel((item.end||Date.now())-item.start)}</small></time><div class="low-type-badges"><b class="${item.side}-low">${label}</b></div><strong>Started at ${money(item.value)} / ${money(item.target)} USDT${item.end?"":" · ONGOING"}</strong></div>`;
   }).join("")||'<div class="history-empty">No below-target depth period in this time range.</div>';
   $("timedHistoryList").innerHTML=html;
-  $("buyHistoryTarget").textContent=`Below ${money(thresholds.buy)} USDT setting`;
-  $("sellHistoryTarget").textContent=`Below ${money(thresholds.sell)} USDT setting`;
 }
-function drawChart(){const mins=num($("chartRange")?.value)||60,cut=Date.now()-mins*60000;renderTimedHistory(timedHistoryData(cut));drawSideChart("buy",mins,cut);drawSideChart("sell",mins,cut);}
+function drawChart(){const selected=$("chartRange")?.value||"60",cut=Date.now()-(selected==="all"?1440:num(selected)||60)*60000;renderTimedHistory(timedHistoryData(cut));}
 
 function rowsHtml(rows,side,mid){let cumulativeQty=0,cumulativeValue=0;const levels=rows.map(([p,a],priority)=>{const quantity=num(a),value=num(p)*quantity;cumulativeQty+=quantity;cumulativeValue+=value;return {p,a,value,priority,cumulativeQty,cumulativeValue};}),max=Math.max(...levels.map(x=>x.value),1),visible=side==="ask"?[...levels].reverse():levels;return visible.map(x=>{const distance=mid?Math.abs((num(x.p)-mid)/mid)*100:100,cls=distance<2?"near":distance<=5?"medium":"far",large=side==="bid"&&x.priority<largeBuySettings.levels&&x.value>=largeBuySettings.amount?" large-order":"",label=side==="ask"?"Sell total through this price":"Buy total through this price";return `<div class="book-row ${side} ${cls}${large}" tabindex="0" aria-label="${label} at ${price(x.p)} USDT: ${amount(x.cumulativeQty)} LF, ${money(x.cumulativeValue)} USDT"><i style="width:${Math.max(2,x.value/max*100)}%"></i><span>${price(x.p)}</span><span>${amount(x.a)}</span><span>${money(x.value)}</span><div class="book-cumulative"><small>${label}</small><span><em>Price</em><b>${price(x.p)} USDT</b></span><span><em>Total qty</em><b>${amount(x.cumulativeQty)} LF</b></span><span><em>Total value</em><b>${money(x.cumulativeValue)} USDT</b></span></div></div>`;}).join("");}
 
