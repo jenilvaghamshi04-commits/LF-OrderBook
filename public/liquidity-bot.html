@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#060806">
   <meta name="description" content="LF liquidity bot dry-run simulator">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/liquidity-bot.css?v=5">
+  <link rel="stylesheet" href="/liquidity-bot.css?v=6">
   <title>LF Liquidity Bot Test</title>
 </head>
 <body>
@@ -26,9 +26,9 @@
       <div class="fields">
         <label><span>Buying order amount</span><div><input id="buyAmount" type="number" min="1" step="1" value="500" required><b>USDT</b></div></label>
         <label><span>Selling order amount</span><div><input id="sellAmount" type="number" min="1" step="1" value="500" required><b>USDT</b></div></label>
-        <label><span>Buy below pool price</span><div><input id="buyPercent" type="number" min="0.01" max="20" step="0.01" value="1.95" required><b>%</b></div></label>
-        <label><span>Sell above pool price</span><div><input id="sellPercent" type="number" min="0.01" max="20" step="0.01" value="1.95" required><b>%</b></div></label>
-        <label class="full"><span>Check live pool every</span><div><input id="intervalSeconds" type="number" min="1" max="300" step="1" value="10" required><b>SECONDS</b></div><small>The live pool provider may return a cached price for several seconds.</small></label>
+        <label><span>Buy offset below book midpoint</span><div><input id="buyPercent" type="number" min="0.01" max="20" step="0.01" value="2" required><b>%</b></div></label>
+        <label><span>Sell offset above book midpoint</span><div><input id="sellPercent" type="number" min="0.01" max="20" step="0.01" value="2" required><b>%</b></div></label>
+        <label class="full"><span>Check live market every</span><div><input id="intervalSeconds" type="number" min="1" max="300" step="1" value="10" required><b>SECONDS</b></div><small>The pool price is used as a safety boundary; the Gate.io book midpoint sets the order offsets.</small></label>
       </div>
       <div class="actions"><button id="startBtn" class="primary" type="submit">▶ Start testing</button><button id="pauseBtn" type="button" disabled>Pause</button><button id="checkBtn" type="button">Check now</button></div>
       <div class="safety"><b>🔒 Calculations never submit orders automatically</b><span>All buy/sell actions in this page create local paper orders only. Nothing is sent to an exchange.</span></div>
@@ -52,12 +52,12 @@
       <div class="target buy-target"><span><i></i> BUY TARGET PREVIEW · NOT SENT</span><b id="bookBuyTarget">—</b><small id="bookBuyPosition">Waiting for price calculation</small></div>
       <div class="target sell-target"><span><i></i> SELL TARGET PREVIEW · NOT SENT</span><b id="bookSellTarget">—</b><small id="bookSellPosition">Waiting for price calculation</small></div>
     </div>
-    <div class="book-summary"><span>Best bid <b id="bestBid">—</b></span><span>Best ask <b id="bestAsk">—</b></span><span>Spread <b id="bookSpread">—</b></span><span>Updated <b id="bookUpdated">—</b></span></div>
+    <div class="book-summary"><span>Book midpoint <b id="bookMidpoint">—</b></span><span>Best bid <b id="bestBid">—</b></span><span>Best ask <b id="bestAsk">—</b></span><span>Spread <b id="bookSpread">—</b></span><span>Updated <b id="bookUpdated">—</b></span></div>
     <div class="book-columns">
       <div class="book-side asks-side"><h3><i></i> Asks <small>(sell orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="asks" class="book-rows"><div class="book-empty">Loading asks…</div></div></div>
       <div class="book-side bids-side"><h3><i></i> Bids <small>(buy orders)</small></h3><div class="book-table-head"><span>Price (USDT)</span><span>Amount (LF)</span><span>Value (USDT)</span></div><div id="bids" class="book-rows"><div class="book-empty">Loading bids…</div></div></div>
     </div>
-    <div class="book-footnote">Public market data is read-only reference data. Simulated orders are local only and never reach Gate.io.</div>
+    <div class="book-footnote">The order offset is calculated from the midpoint of the live Gate.io best bid and ask. Safety rule: a buy target must be below the live DEX pool price; a sell target must be above it. Unsafe sides are blocked and checked again before each paper order.</div>
   </section>
   <section class="panel simulation-panel">
     <header><div><small>LOCAL SIMULATION · NO EXCHANGE CREDENTIALS</small><h2>Create and verify simulated orders</h2></div><span id="simulationStatus" class="simulation-status">Simulation ready</span></header>
@@ -84,6 +84,6 @@
     <div id="activity" class="activity"><div class="empty">Start testing to record simulated order calculations.</div></div>
   </section>
 </main>
-<script src="/liquidity-bot.js?v=5" defer></script>
+<script src="/liquidity-bot.js?v=6" defer></script>
 </body>
 </html>
