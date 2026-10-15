@@ -79,11 +79,78 @@ function checkNoTradeActivity(){if(!lastMarketTradeAt||noTradeAlertActive||Date.
 function findLargeBuys(book){return (book.bids||[]).slice(0,largeBuySettings.levels).map(([p,a])=>{const orderPrice=num(p),quantity=num(a);return {price:orderPrice,quantity,value:orderPrice*quantity,key:String(p)};}).filter(order=>order.value>=largeBuySettings.amount);}
 
 async function sendTelegram(side,value,threshold){if(!telegramEnabled||!telegramConfigured)return;try{const r=await fetch("/api/telegram",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({side,value,threshold})});if(!r.ok)throw new Error((await r.json()).message);}catch(e){$("telegramStatus").textContent=`Telegram error: ${e.message}`;}}
-function addHistory(depth){const now=Date.now(),buyLow=depth.buy<thresholds.buy,sellLow=depth.sell<thresholds.sell,totalLow=depth.total<thresholds.total,newBuy=buyLow&&!historyLowState.buy,newSell=sellLow&&!historyLowState.sell,newTotal=totalLow&&!historyLowState.total;historyLowState={buy:buyLow,sell:sellLow,total:totalLow};if(!newBuy&&!newSell&&!newTotal)return;history.push({t:now,b:depth.buy,s:depth.sell,v:depth.total,lb:newBuy,ls:newSell,lt:newTotal,tb:thresholds.buy,ts:thresholds.sell,tt:thresholds.total});history=history.filter(x=>x.t>=now-3600000).slice(-200);localStorage.setItem(keys.history,JSON.stringify(history));drawChart();}
-function sideHistoryData(side,cut){const key=side==="buy"?"b":"s",flagKey=side==="buy"?"lb":"ls",targetKey=side==="buy"?"tb":"ts",target=thresholds[side],events=[];let wasLow=false;for(const item of history){if(typeof item[flagKey]==="boolean"){if(item.t>=cut&&item[flagKey])events.push(item);continue;}const low=num(item[key])<num(item[targetKey]||target);if(item.t>=cut&&low&&!wasLow)events.push(item);wasLow=low;}return events;}
+function addHistory(depth){
+  const now=Date.now(),low={buy:depth.buy<thresholds.buy,sell:depth.sell<thresholds.sell,total:depth.total<thresholds.total};
+  const changed=low.buy!==historyLowState.buy||low.sell!==historyLowState.sell||low.total!==historyLowState.total;
+  historyLowState=low;
+  if(!changed)return;
+  history.push({t:now,b:depth.buy,s:depth.sell,v:depth.total,low:{...low},tb:thresholds.buy,ts:thresholds.sell,tt:thresholds.total});
+  history=history.filter(item=>item.t>=now-86400000).slice(-1000);
+  localStorage.setItem(keys.history,JSON.stringify(history));
+  drawChart();
+}
+function historyState(item,previous){
+  const total=num(item.v)||num(item.b)+num(item.s);
+  if(item.low&&typeof item.low==="object")return {buy:!!item.low.buy,sell:!!item.low.sell,total:!!item.low.total};
+  if(typeof item.lb==="boolean"||typeof item.ls==="boolean"||typeof item.lt==="boolean")return {
+    buy:item.lb?true:previous.buy,
+    sell:item.ls?true:previous.sell,
+    total:item.lt?true:previous.total
+  };
+  return {
+    buy:num(item.b)<num(item.tb||thresholds.buy),
+    sell:num(item.s)<num(item.ts||thresholds.sell),
+    total:total<num(item.tt||thresholds.total)
+  };
+}
+function sideHistoryData(side,cut){
+  const key=side==="buy"?"b":"s",events=[];
+  let state={buy:false,sell:false,total:false};
+  for(const item of [...history].sort((a,b)=>a.t-b.t)){
+    const next=historyState(item,state);
+    if(item.t>=cut&&next[side]&&!state[side])events.push(item);
+    state=next;
+  }
+  return events;
+}
 function drawSideChart(side,mins,cut){const key=side==="buy"?"b":"s",target=thresholds[side],canvas=$(side+"DepthChart"),empty=$(side+"ChartEmpty"),data=sideHistoryData(side,cut),ctx=canvas.getContext("2d"),box=canvas.getBoundingClientRect(),ratio=devicePixelRatio||1;canvas.width=Math.max(1,box.width*ratio);canvas.height=Math.max(1,box.height*ratio);ctx.scale(ratio,ratio);const w=box.width,h=box.height,p={l:45,r:12,t:14,b:24};ctx.clearRect(0,0,w,h);empty.classList.toggle("hidden",data.length>0);if(!data.length)return;const max=Math.max(target,...data.map(item=>num(item[key])),1)*1.12,x=t=>p.l+(t-cut)/(Date.now()-cut)*(w-p.l-p.r),y=v=>p.t+(1-v/max)*(h-p.t-p.b),color=side==="buy"?"#22c55e":"#ef4444";ctx.font="9px system-ui";ctx.fillStyle="#77857d";ctx.strokeStyle="#1a211d";ctx.lineWidth=1;for(let i=0;i<=3;i++){const yy=p.t+i*(h-p.t-p.b)/3,value=max*(1-i/3);ctx.beginPath();ctx.moveTo(p.l,yy);ctx.lineTo(w-p.r,yy);ctx.stroke();ctx.fillText(value>=1000?`${(value/1000).toFixed(1)}k`:value.toFixed(0),3,yy+3);}ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle="#f59e0b";ctx.beginPath();ctx.moveTo(p.l,y(target));ctx.lineTo(w-p.r,y(target));ctx.stroke();ctx.restore();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();data.forEach((item,index)=>index?ctx.lineTo(x(item.t),y(num(item[key]))):ctx.moveTo(x(item.t),y(num(item[key]))));if(data.length>1)ctx.stroke();for(const item of data){ctx.beginPath();ctx.arc(x(item.t),y(num(item[key])),3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}ctx.fillStyle="#77857d";ctx.fillText(`−${mins}m`,p.l,h-6);ctx.fillText("now",w-p.r-20,h-6);}
-function timedHistoryData(cut){const events=[];let oldState={buy:false,sell:false,total:false};for(const item of history){if(item.t<cut)continue;const total=num(item.v)||num(item.b)+num(item.s);if(typeof item.lb==="boolean"||typeof item.ls==="boolean"||typeof item.lt==="boolean"){const normalized={...item,v:total,lt:typeof item.lt==="boolean"?item.lt:total<num(item.tt||thresholds.total),tt:num(item.tt)||thresholds.total};if(normalized.lb||normalized.ls||normalized.lt)events.push(normalized);continue;}const low={buy:num(item.b)<thresholds.buy,sell:num(item.s)<thresholds.sell,total:total<thresholds.total},derived={...item,v:total,lb:low.buy&&!oldState.buy,ls:low.sell&&!oldState.sell,lt:low.total&&!oldState.total,tb:thresholds.buy,ts:thresholds.sell,tt:thresholds.total};oldState=low;if(derived.lb||derived.ls||derived.lt)events.push(derived);}return events;}
-function renderTimedHistory(data){const html=[...data].reverse().slice(0,40).map(item=>{const date=new Date(item.t),badges=[item.lb?'<b class="buy-low">BUY LOW</b>':'',item.ls?'<b class="sell-low">SELL LOW</b>':'',item.lt?'<b class="total-low">TOTAL LOW</b>':''].join(''),details=[item.lb?`Buy ${money(item.b)} / ${money(num(item.tb)||thresholds.buy)}`:'',item.ls?`Sell ${money(item.s)} / ${money(num(item.ts)||thresholds.sell)}`:'',item.lt?`Total ${money(num(item.v)||num(item.b)+num(item.s))} / ${money(num(item.tt)||thresholds.total)}`:''].filter(Boolean).join(' · ');return `<div class="timed-history-row"><time><b>${date.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</b><small>${date.toLocaleDateString()}</small></time><div class="low-type-badges">${badges}</div><strong>${details} USDT</strong></div>`;}).join('')||'<div class="history-empty">No below-target depth event in this time range.</div>';$("timedHistoryList").innerHTML=html;$("buyHistoryTarget").textContent=`Below ${money(thresholds.buy)} USDT setting`;$("sellHistoryTarget").textContent=`Below ${money(thresholds.sell)} USDT setting`;}
+function timedHistoryData(cut){
+  const intervals=[],open={buy:null,sell:null,total:null};
+  let state={buy:false,sell:false,total:false};
+  const valueFor=(item,side)=>side==="buy"?num(item.b):side==="sell"?num(item.s):num(item.v)||num(item.b)+num(item.s);
+  const targetFor=(item,side)=>num(item[side==="buy"?"tb":side==="sell"?"ts":"tt"])||thresholds[side];
+  for(const item of [...history].sort((a,b)=>a.t-b.t)){
+    const next=historyState(item,state);
+    for(const side of ["buy","sell","total"]){
+      if(next[side]&&!state[side])open[side]={side,start:item.t,end:null,value:valueFor(item,side),target:targetFor(item,side)};
+      if(!next[side]&&state[side]&&open[side]){
+        open[side].end=item.t;
+        if(open[side].end>=cut)intervals.push(open[side]);
+        open[side]=null;
+      }
+    }
+    state=next;
+  }
+  for(const side of ["buy","sell","total"])if(open[side]&&Date.now()>=cut)intervals.push(open[side]);
+  return intervals.sort((a,b)=>b.start-a.start);
+}
+function durationLabel(ms){
+  const totalSeconds=Math.max(0,Math.floor(ms/1000)),hours=Math.floor(totalSeconds/3600),minutes=Math.floor(totalSeconds%3600/60),seconds=totalSeconds%60;
+  if(hours)return `${hours}h ${minutes}m`;
+  if(minutes)return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+function renderTimedHistory(data){
+  const html=data.slice(0,60).map(item=>{
+    const start=new Date(item.start),end=item.end?new Date(item.end):null,label=item.side==="buy"?"BUY LOW":item.side==="sell"?"SELL LOW":"TOTAL LOW";
+    const time=`${start.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})} → ${end?end.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"NOW"}`;
+    const dates=end&&end.toLocaleDateString()!==start.toLocaleDateString()?`${start.toLocaleDateString()} → ${end.toLocaleDateString()}`:start.toLocaleDateString();
+    return `<div class="timed-history-row"><time><b>${time}</b><small>${dates} · ${durationLabel((item.end||Date.now())-item.start)}</small></time><div class="low-type-badges"><b class="${item.side}-low">${label}</b></div><strong>Started at ${money(item.value)} / ${money(item.target)} USDT${item.end?"":" · ONGOING"}</strong></div>`;
+  }).join("")||'<div class="history-empty">No below-target depth period in this time range.</div>';
+  $("timedHistoryList").innerHTML=html;
+  $("buyHistoryTarget").textContent=`Below ${money(thresholds.buy)} USDT setting`;
+  $("sellHistoryTarget").textContent=`Below ${money(thresholds.sell)} USDT setting`;
+}
 function drawChart(){const mins=num($("chartRange")?.value)||60,cut=Date.now()-mins*60000;renderTimedHistory(timedHistoryData(cut));drawSideChart("buy",mins,cut);drawSideChart("sell",mins,cut);}
 
 function rowsHtml(rows,side,mid){let cumulativeQty=0,cumulativeValue=0;const levels=rows.map(([p,a],priority)=>{const quantity=num(a),value=num(p)*quantity;cumulativeQty+=quantity;cumulativeValue+=value;return {p,a,value,priority,cumulativeQty,cumulativeValue};}),max=Math.max(...levels.map(x=>x.value),1),visible=side==="ask"?[...levels].reverse():levels;return visible.map(x=>{const distance=mid?Math.abs((num(x.p)-mid)/mid)*100:100,cls=distance<2?"near":distance<=5?"medium":"far",large=side==="bid"&&x.priority<largeBuySettings.levels&&x.value>=largeBuySettings.amount?" large-order":"",label=side==="ask"?"Sell total through this price":"Buy total through this price";return `<div class="book-row ${side} ${cls}${large}" tabindex="0" aria-label="${label} at ${price(x.p)} USDT: ${amount(x.cumulativeQty)} LF, ${money(x.cumulativeValue)} USDT"><i style="width:${Math.max(2,x.value/max*100)}%"></i><span>${price(x.p)}</span><span>${amount(x.a)}</span><span>${money(x.value)}</span><div class="book-cumulative"><small>${label}</small><span><em>Price</em><b>${price(x.p)} USDT</b></span><span><em>Total qty</em><b>${amount(x.cumulativeQty)} LF</b></span><span><em>Total value</em><b>${money(x.cumulativeValue)} USDT</b></span></div></div>`;}).join("");}
