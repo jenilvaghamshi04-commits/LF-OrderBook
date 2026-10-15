@@ -17,7 +17,10 @@ const files = {
   "/sync.js": ["sync.js", "text/javascript; charset=utf-8"],
   "/favicon.svg": ["favicon.svg", "image/svg+xml"],
   "/manifest.webmanifest": ["manifest.webmanifest", "application/manifest+json"],
-  "/sw.js": ["sw.js", "text/javascript; charset=utf-8"]
+  "/sw.js": ["sw.js", "text/javascript; charset=utf-8"],
+  "/liquidity-bot.html": ["liquidity-bot.html", "text/html; charset=utf-8"],
+  "/liquidity-bot.css": ["liquidity-bot.css", "text/css; charset=utf-8"],
+  "/liquidity-bot.js": ["liquidity-bot.js", "text/javascript; charset=utf-8"]
 };
 
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN || "";
